@@ -23,14 +23,18 @@
           </div>
           <div class="row justify-content-center">
             <div class="col-lg-9">
-              <div class="rounded-1 overflow-hidden text-center" style="background:#000;border:1px solid rgba(255,255,255,.1)">
+              <div class="d-flex justify-content-center align-items-center mb-2">
+                <span id="status-dot" style="width:10px;height:10px;border-radius:50%;background:#888;display:inline-block;margin-right:8px"></span>
+                <span id="status-text" class="text-muted-light small">Idle</span>
+              </div>
+              <div class="rounded-1 overflow-hidden text-center" style="background:#000;border:1px solid rgba(255,255,255,.1);position:relative;min-height:300px">
                 <img id="feed" alt="Live feed" style="max-width:100%;display:block;margin:0 auto">
               </div>
               <div class="d-flex justify-content-center mt-3">
                 <button id="start-btn" class="btn-main me-2"><span>Start Feed</span></button>
                 <button id="stop-btn" class="btn-main btn-line"><span>Stop Feed</span></button>
               </div>
-              <p class="text-center text-muted-light mt-2 small">Note: the feed uses the server's default camera (source 0). Ensure a camera is available on the backend host.</p>
+              <p class="text-center text-muted-light mt-2 small">The feed uses the server's camera (source 0 by default; set <code>CAMERA_SOURCE</code> for RTSP/IP cameras). Recognition runs in the background, so the video stays smooth.</p>
             </div>
           </div>
         </div>
@@ -46,15 +50,66 @@
     // The live surveillance feed is admin-only and the backend enforces it.
     if (LOCAITE.requireRole(["admin"])) {
       var feed = document.getElementById("feed");
-      document.getElementById("start-btn").addEventListener("click", function () {
+      var dot = document.getElementById("status-dot");
+      var statusText = document.getElementById("status-text");
+      var running = false, statusTimer = null;
+
+      var COLORS = {
+        live: "#28a745", starting: "#f0ad4e", "loading-model": "#f0ad4e",
+        "no-camera": "#dc3545", offline: "#888", idle: "#888"
+      };
+      var LABELS = {
+        live: "Live", starting: "Starting camera…", "loading-model": "Loading AI model…",
+        "no-camera": "No camera signal", offline: "Offline", idle: "Idle"
+      };
+      function setStatus(s) {
+        dot.style.background = COLORS[s] || "#888";
+        statusText.textContent = LABELS[s] || s;
+      }
+
+      async function pollStatus() {
+        try {
+          var s = await LOCAITE.apiGet("/api/stream/status");
+          setStatus(s.status);
+        } catch (e) { /* ignore transient errors */ }
+      }
+
+      function start() {
+        if (running) return;
+        running = true;
+        setStatus("starting");
         // <img> can't send an Authorization header, so the token goes in the
         // query string (backend accepts JWT via ?jwt= for the stream only).
         feed.src = "/api/stream/feed?jwt=" + encodeURIComponent(LOCAITE.token() || "") +
                    "&ts=" + Date.now();
-      });
-      document.getElementById("stop-btn").addEventListener("click", function () {
+        if (statusTimer) clearInterval(statusTimer);
+        statusTimer = setInterval(pollStatus, 2000);
+        pollStatus();
+      }
+      function stop() {
+        running = false;
         feed.src = "";
+        if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+        setStatus("idle");
+      }
+
+      // Auto-reconnect if the stream drops.
+      feed.addEventListener("error", function () {
+        if (running) {
+          setStatus("starting");
+          setTimeout(function () {
+            if (running) feed.src = "/api/stream/feed?jwt=" +
+              encodeURIComponent(LOCAITE.token() || "") + "&ts=" + Date.now();
+          }, 1500);
+        }
       });
+
+      document.getElementById("start-btn").addEventListener("click", start);
+      document.getElementById("stop-btn").addEventListener("click", stop);
+      window.addEventListener("beforeunload", stop);
+
+      // Start automatically on load.
+      start();
     }
   </script>
 </body>

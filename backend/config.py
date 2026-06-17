@@ -62,6 +62,17 @@ class BaseConfig:
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH_MB", "25")) * 1024 * 1024
     ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
+    # --- Live stream / recognition tuning -------------------------------
+    CAMERA_SOURCE = os.environ.get("CAMERA_SOURCE", "0")   # 0 = webcam, or RTSP/HTTP URL
+    STREAM_TARGET_FPS = int(os.environ.get("STREAM_TARGET_FPS", "25"))      # output smoothness
+    STREAM_RECOG_INTERVAL = float(os.environ.get("STREAM_RECOG_INTERVAL", "0.4"))  # secs between recognitions
+    STREAM_JPEG_QUALITY = int(os.environ.get("STREAM_JPEG_QUALITY", "70"))  # 1-100
+    STREAM_DETECT_WIDTH = int(os.environ.get("STREAM_DETECT_WIDTH", "640"))  # downscale width for detection
+    STREAM_IDLE_TIMEOUT = float(os.environ.get("STREAM_IDLE_TIMEOUT", "8"))  # release camera after N idle secs
+    EMBED_CACHE_TTL = float(os.environ.get("EMBED_CACHE_TTL", "10"))         # refresh case embeddings every N secs
+    ALERT_COOLDOWN_SECONDS = int(os.environ.get("ALERT_COOLDOWN_SECONDS", "30"))
+    MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.65"))
+
     # Access-token lifetime (minutes)
     from datetime import timedelta
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(
