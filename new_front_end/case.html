@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Case Details - locAIte</title>
+  <link rel="icon" href="images/icon.webp" type="image/gif" sizes="16x16">
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css" id="bootstrap">
+  <link href="css/plugins.css" rel="stylesheet" type="text/css">
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+  <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="site-header"></div>
+    <div class="no-bottom no-top" id="content">
+      <div id="top"></div>
+      <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
+        <div class="container">
+          <a href="cases.html" class="text-light"><i class="icofont-rounded-left"></i> Back to all cases</a>
+          <div id="detail" class="mt-4"><p>Loading…</p></div>
+        </div>
+      </section>
+    </div>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="js/plugins.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/designesia.js"></script>
+  <script>
+    var id = new URLSearchParams(location.search).get("id");
+    var detail = document.getElementById("detail");
+
+    function thumbs(photos) {
+      if (!photos || !photos.length) return "";
+      return '<div class="row g-2 mt-2">' + photos.map(function (p) {
+        return '<div class="col-3"><div style="height:90px;background:#111 url(\'' + p + '\') center/cover no-repeat;border-radius:6px"></div></div>';
+      }).join("") + "</div>";
+    }
+
+    function render(c) {
+      var img = c.photo_path || "images/misc/placeholder.jpg";
+      var badge = c.status === "solved"
+        ? '<span class="badge bg-success">Solved</span>'
+        : '<span class="badge bg-danger">Active</span>';
+      var adminCtrl = LOCAITE.isAdmin()
+        ? '<div class="mt-4"><button id="toggle-status" class="btn-main"><span>Mark as ' +
+          (c.status === "solved" ? "Active" : "Solved") + "</span></button></div>"
+        : "";
+      detail.innerHTML =
+        '<div class="row g-4">' +
+        '<div class="col-lg-5">' +
+        '<div style="height:380px;background:#111 url(\'' + img + '\') center/cover no-repeat;border-radius:8px"></div>' +
+        thumbs(c.photos) +
+        "</div>" +
+        '<div class="col-lg-7">' +
+        '<div class="d-flex align-items-center mb-2"><h2 class="mb-0 me-3">' + (c.name || "Unknown") + "</h2>" + badge + "</div>" +
+        '<table class="table table-dark table-borderless"><tbody>' +
+        "<tr><th style='width:200px'>National ID</th><td>" + (c.national_id || "—") + "</td></tr>" +
+        "<tr><th>Last Known Location</th><td>" + (c.last_location || "—") + "</td></tr>" +
+        "<tr><th>Identifiers</th><td>" + (c.identifiers || "—") + "</td></tr>" +
+        "<tr><th>Status</th><td>" + c.status + "</td></tr>" +
+        "</tbody></table>" + adminCtrl +
+        "</div></div>";
+
+      var btn = document.getElementById("toggle-status");
+      if (btn) btn.addEventListener("click", async function () {
+        var next = c.status === "solved" ? "active" : "solved";
+        try {
+          await LOCAITE.apiPut("/api/cases/" + c.id + "/status", { status: next });
+          load();
+        } catch (err) { alert(err.message); }
+      });
+    }
+
+    async function load() {
+      try {
+        var c = await LOCAITE.apiGet("/api/cases/" + id);
+        render(c);
+      } catch (err) {
+        detail.innerHTML = '<div class="alert alert-danger">Case not found: ' + err.message + "</div>";
+      }
+    }
+    if (!id) detail.innerHTML = '<div class="alert alert-warning">No case id provided.</div>';
+    else load();
+  </script>
+</body>
+</html>

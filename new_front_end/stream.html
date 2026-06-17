@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Live Stream - locAIte</title>
+  <link rel="icon" href="images/icon.webp" type="image/gif" sizes="16x16">
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css" id="bootstrap">
+  <link href="css/plugins.css" rel="stylesheet" type="text/css">
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+  <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="site-header"></div>
+    <div class="no-bottom no-top" id="content">
+      <div id="top"></div>
+      <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
+        <div class="container">
+          <div class="text-center mb-4">
+            <h2>Live Surveillance Feed</h2>
+            <p class="text-muted-light">Faces are detected in real time and matched against active cases. A green box marks a match; an alert is sent to the admin dashboard.</p>
+          </div>
+          <div class="row justify-content-center">
+            <div class="col-lg-9">
+              <div class="rounded-1 overflow-hidden text-center" style="background:#000;border:1px solid rgba(255,255,255,.1)">
+                <img id="feed" alt="Live feed" style="max-width:100%;display:block;margin:0 auto">
+              </div>
+              <div class="d-flex justify-content-center mt-3">
+                <button id="start-btn" class="btn-main me-2"><span>Start Feed</span></button>
+                <button id="stop-btn" class="btn-main btn-line"><span>Stop Feed</span></button>
+              </div>
+              <p class="text-center text-muted-light mt-2 small">Note: the feed uses the server's default camera (source 0). Ensure a camera is available on the backend host.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="js/plugins.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/designesia.js"></script>
+  <script>
+    // The live surveillance feed is admin-only and the backend enforces it.
+    if (LOCAITE.requireRole(["admin"])) {
+      var feed = document.getElementById("feed");
+      document.getElementById("start-btn").addEventListener("click", function () {
+        // <img> can't send an Authorization header, so the token goes in the
+        // query string (backend accepts JWT via ?jwt= for the stream only).
+        feed.src = "/api/stream/feed?jwt=" + encodeURIComponent(LOCAITE.token() || "") +
+                   "&ts=" + Date.now();
+      });
+      document.getElementById("stop-btn").addEventListener("click", function () {
+        feed.src = "";
+      });
+    }
+  </script>
+</body>
+</html>

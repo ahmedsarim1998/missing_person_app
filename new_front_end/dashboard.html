@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Admin Dashboard - locAIte</title>
+  <link rel="icon" href="images/icon.webp" type="image/gif" sizes="16x16">
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css" id="bootstrap">
+  <link href="css/plugins.css" rel="stylesheet" type="text/css">
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+  <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="site-header"></div>
+    <div class="no-bottom no-top" id="content">
+      <div id="top"></div>
+      <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
+        <div class="container">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Admin Dashboard</h2>
+            <a href="sightings.html" class="btn-main btn-line"><span>Facebook Sightings</span></a>
+          </div>
+
+          <div class="row g-4 mb-5" id="stats">
+            <div class="col-lg-4"><div class="p-4 rounded-1 text-center" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)"><h2 class="id-color mb-0" id="stat-total">–</h2><p class="mb-0">Total Cases</p></div></div>
+            <div class="col-lg-4"><div class="p-4 rounded-1 text-center" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)"><h2 class="id-color mb-0" id="stat-active">–</h2><p class="mb-0">Active Cases</p></div></div>
+            <div class="col-lg-4"><div class="p-4 rounded-1 text-center" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)"><h2 class="id-color mb-0" id="stat-pending">–</h2><p class="mb-0">Pending Matches</p></div></div>
+          </div>
+
+          <h4 class="mb-3">Pending Match Alerts</h4>
+          <div id="matches" class="mb-5"><p>Loading…</p></div>
+        </div>
+      </section>
+    </div>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="js/plugins.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/designesia.js"></script>
+  <script>
+    if (LOCAITE.requireRole(["admin"])) {
+      async function loadStats() {
+        try {
+          var s = await LOCAITE.apiGet("/api/admin/dashboard");
+          document.getElementById("stat-total").textContent = s.total_cases;
+          document.getElementById("stat-active").textContent = s.active_cases;
+          document.getElementById("stat-pending").textContent = s.pending_matches;
+        } catch (e) {}
+      }
+      function matchRow(m) {
+        var photo = m.person_photo || "images/misc/placeholder.jpg";
+        // Lower distance = better match; show as a rough confidence %.
+        var conf = Math.max(0, Math.round((1 - m.confidence) * 100));
+        return (
+          '<div class="d-flex align-items-center p-3 mb-2 rounded-1" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)">' +
+          '<div style="width:70px;height:70px;background:#111 url(\'' + photo + '\') center/cover no-repeat;border-radius:6px"></div>' +
+          '<div class="ms-3 flex-grow-1">' +
+          "<h6 class='mb-0'>" + m.person_name + "</h6>" +
+          "<small class='text-muted-light'>Distance " + m.confidence.toFixed(3) + " · ~" + conf + "% confidence · " + new Date(m.timestamp).toLocaleString() + "</small>" +
+          "</div>" +
+          '<div><button class="btn-main btn-sm me-2" data-act="confirm" data-id="' + m.id + '"><span>Confirm</span></button>' +
+          '<button class="btn-main btn-line btn-sm" data-act="reject" data-id="' + m.id + '"><span>Reject</span></button></div>' +
+          "</div>"
+        );
+      }
+      async function loadMatches() {
+        var host = document.getElementById("matches");
+        try {
+          var list = await LOCAITE.apiGet("/api/admin/matches");
+          host.innerHTML = list.length ? list.map(matchRow).join("") : '<p class="text-muted-light">No pending matches.</p>';
+          host.querySelectorAll("button[data-act]").forEach(function (b) {
+            b.addEventListener("click", async function () {
+              b.disabled = true;
+              try {
+                await LOCAITE.apiPost("/api/admin/match/" + b.dataset.id, { action: b.dataset.act });
+                loadStats(); loadMatches();
+              } catch (err) { alert(err.message); b.disabled = false; }
+            });
+          });
+        } catch (err) {
+          host.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
+        }
+      }
+      loadStats();
+      loadMatches();
+    }
+  </script>
+</body>
+</html>

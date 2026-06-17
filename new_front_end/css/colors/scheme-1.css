@@ -1,0 +1,12 @@
+/* locAIte brand palette
+   green #7EC748 · blue #1C81D9 · grey #BCC2C7 · navy #0A1A35 */
+* {
+  --primary-color: #1C81D9;
+  --primary-color-rgb: 28, 129, 217;
+  --secondary-color: #7EC748;
+  --primary-gradient: 45deg, var(--primary-color), var(--secondary-color);
+  --bg-dark-1: #0A1A35;
+  --bg-dark-2: #0E2147;
+  --bg-dark-3: #14315f;
+  --bg-dark-1-rgb: 10, 26, 53;
+}

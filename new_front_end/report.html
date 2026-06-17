@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Report Missing Person - locAIte</title>
+  <link rel="icon" href="images/icon.webp" type="image/gif" sizes="16x16">
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css" id="bootstrap">
+  <link href="css/plugins.css" rel="stylesheet" type="text/css">
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+  <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="site-header"></div>
+    <div class="no-bottom no-top" id="content">
+      <div id="top"></div>
+      <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
+        <div class="container">
+          <div class="row justify-content-center">
+            <div class="col-lg-8">
+              <div class="text-center mb-4">
+                <h2>Report a Missing Person</h2>
+                <p class="text-muted-light">Provide details and clear face photos. The system extracts a facial signature used to match against live camera feeds.</p>
+              </div>
+              <div class="p-4 rounded-1" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)">
+                <div id="msg"></div>
+                <form id="report-form">
+                  <div class="mb-3">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" name="name" class="form-control" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">National ID (CNIC)</label>
+                    <input type="text" name="national_id" class="form-control" placeholder="XXXXX-XXXXXXX-X" pattern="\d{5}-\d{7}-\d{1}">
+                    <small class="text-muted-light">Format: 12345-1234567-1</small>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Last Known Location</label>
+                    <input type="text" name="last_location" class="form-control" placeholder="e.g. Saddar, Karachi">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Identifiers / Physical Description</label>
+                    <textarea name="identifiers" rows="3" class="form-control" placeholder="Height, clothing, marks, etc."></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Photos * (first photo becomes the main display photo)</label>
+                    <input type="file" name="photos" class="form-control" accept="image/*" multiple required>
+                  </div>
+                  <button type="submit" class="btn-main" id="submit-btn"><span>Submit Report</span></button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="js/plugins.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/designesia.js"></script>
+  <script>
+    if (LOCAITE.requireRole()) {
+      document.getElementById("report-form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        var msg = document.getElementById("msg");
+        var btn = document.getElementById("submit-btn");
+        msg.innerHTML = "";
+        var f = e.target;
+        var fd = new FormData();
+        fd.append("name", f.name.value.trim());
+        fd.append("national_id", f.national_id.value.trim());
+        fd.append("last_location", f.last_location.value.trim());
+        fd.append("identifiers", f.identifiers.value.trim());
+        for (var i = 0; i < f.photos.files.length; i++) fd.append("photos", f.photos.files[i]);
+        btn.disabled = true; btn.innerHTML = "<span>Processing faces…</span>";
+        try {
+          var data = await LOCAITE.apiPostForm("/api/cases/", fd);
+          window.location.href = "case.html?id=" + data.id;
+        } catch (err) {
+          msg.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
+          btn.disabled = false; btn.innerHTML = "<span>Submit Report</span>";
+        }
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets & environment
+.env
+backend/.env
+backend/instance/*.key
+
+# Database
+*.db
+backend/instance/*.db
+
+# Logs
+logs/
+backend/logs/
+
+# Uploads (user data / generated)
+backend/static/uploads/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.tmp
+~$*
+
+# Node (doc generator)
+node_modules/
+package-lock.json

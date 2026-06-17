@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Register - locAIte</title>
+  <link rel="icon" href="images/icon.webp" type="image/gif" sizes="16x16">
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link href="css/bootstrap.min.css" rel="stylesheet" type="text/css" id="bootstrap">
+  <link href="css/plugins.css" rel="stylesheet" type="text/css">
+  <link href="css/style.css" rel="stylesheet" type="text/css">
+  <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="site-header"></div>
+    <div class="no-bottom no-top" id="content">
+      <div id="top"></div>
+      <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
+        <div class="container">
+          <div class="row justify-content-center">
+            <div class="col-lg-6 col-md-9">
+              <div class="p-4 rounded-1" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)">
+                <h3 class="mb-3">Create an Account</h3>
+                <div id="msg"></div>
+                <form id="register-form">
+                  <div class="row">
+                    <div class="col-md-4 mb-3">
+                      <label class="form-label">First Name</label>
+                      <input type="text" name="first_name" class="form-control" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                      <label class="form-label">Middle Name</label>
+                      <input type="text" name="middle_name" class="form-control">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                      <label class="form-label">Last Name</label>
+                      <input type="text" name="last_name" class="form-control" required>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="username" class="form-control" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-control" required>
+                  </div>
+                  <button type="submit" class="btn-main w-100"><span>Register</span></button>
+                </form>
+                <p class="mt-3 mb-0">Already have an account? <a href="login.html">Login</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="site-footer"></div>
+  </div>
+
+  <script src="js/plugins.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/designesia.js"></script>
+  <script>
+    document.getElementById("register-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var msg = document.getElementById("msg");
+      msg.innerHTML = "";
+      var f = e.target;
+      try {
+        await LOCAITE.apiPost("/api/auth/signup", {
+          first_name: f.first_name.value.trim(),
+          middle_name: f.middle_name.value.trim(),
+          last_name: f.last_name.value.trim(),
+          email: f.email.value.trim(),
+          username: f.username.value.trim(),
+          password: f.password.value,
+        });
+        // Auto-login for convenience.
+        var data = await LOCAITE.apiPost("/api/auth/login", {
+          username: f.username.value.trim(),
+          password: f.password.value,
+        });
+        LOCAITE.login(data);
+        window.location.href = "cases.html";
+      } catch (err) {
+        msg.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
+      }
+    });
+  </script>
+</body>
+</html>

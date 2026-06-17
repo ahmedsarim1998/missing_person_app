@@ -1,0 +1,29 @@
+# --- Web framework / API ---
+flask==2.2.5
+flask-sqlalchemy==3.0.5
+flask-cors==5.0.0
+flask-jwt-extended==4.6.0
+werkzeug==2.2.3
+python-dotenv==0.21.1
+
+# --- Production server ---
+waitress==2.1.2
+
+# --- Computer vision / AI engine ---
+opencv-python-headless==4.12.0.88
+keras-facenet==0.3.2
+mtcnn==0.1.1
+tensorflow==2.11.0
+numpy==1.21.6
+pillow
+scipy
+protobuf<=3.20.3
+
+# --- Social-media analyzer (optional; pipeline falls back gracefully if absent) ---
+rapidfuzz            # fuzzy name matching (falls back to stdlib difflib if missing)
+spacy<3.5            # NER for location extraction (Py3.7-compatible); also run: python -m spacy download en_core_web_sm
+facebook-scraper     # only needed when going live with real group scraping
+
+# --- Testing ---
+pytest==7.4.4
+requests==2.31.0
