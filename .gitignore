@@ -31,3 +31,10 @@ Thumbs.db
 # Node (doc generator)
 node_modules/
 package-lock.json
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Local archive of non-code project assets (meeting notes, internal docs, etc.)
+# Kept out of version control — review locally and delete when no longer needed.
+_archive_review/
