@@ -125,5 +125,7 @@ runs fully offline and does **not** load TensorFlow.
 
 ## License
 
-This project was developed as a final-year project. Add a license here before
-distributing publicly.
+Released under the [MIT License](LICENSE).
+
+Developed as a final-year project by the locAIte Team at **Iqra University,
+Gulshan Campus, Karachi**.
