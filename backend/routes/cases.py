@@ -110,21 +110,21 @@ def create_case():
 def get_case(case_id):
     case = MissingPerson.query.get_or_404(case_id)
     
-    # Get all photos
+    # Gather every uploaded photo for this case. The files live under the
+    # configured UPLOAD_FOLDER in a per-person subdirectory; the public URL is
+    # the directory of the stored photo_path (e.g. /static/uploads/Name).
     additional_photos = []
     if case.photo_path:
-        # Extract dir from photo path (e.g., /static/uploads/Name/file.jpg)
-        # We need absolute path to listdir
-        # Assuming photo_path is relative to root like /static/...
-        
-        # This is a bit hacky, but works if we follow naming convention
-        rel_dir = os.path.dirname(case.photo_path).lstrip('/') # static/uploads/Name
-        abs_dir = os.path.join(os.getcwd(), rel_dir)
-        
-        if os.path.exists(abs_dir):
-            for f in os.listdir(abs_dir):
-                if f.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    additional_photos.append(f"/{rel_dir}/{f}")
+        url_dir = os.path.dirname(case.photo_path)                  # /static/uploads/Name
+        person_subdir = os.path.basename(url_dir)                   # Name
+        abs_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], person_subdir)
+        allowed = current_app.config['ALLOWED_IMAGE_EXTENSIONS']
+
+        if os.path.isdir(abs_dir):
+            for f in sorted(os.listdir(abs_dir)):
+                ext = f.rsplit('.', 1)[-1].lower() if '.' in f else ''
+                if ext in allowed:
+                    additional_photos.append(f"{url_dir}/{f}")
                     
     return jsonify({
         "id": case.id,
