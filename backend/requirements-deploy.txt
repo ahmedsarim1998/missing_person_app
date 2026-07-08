@@ -1,11 +1,16 @@
 # Deployment requirements — pinned for the Docker image (Python 3.10).
 #
-# This is a trimmed, conflict-free subset of requirements.txt used for cloud
-# builds. It drops the OPTIONAL social-media analyzer stack (spacy /
-# facebook-scraper / rapidfuzz), which the app imports defensively and runs
-# fine without. scipy and protobuf are pinned to versions that are compatible
-# with numpy 1.21.6 and TensorFlow 2.11 on Python 3.10, avoiding the resolver
-# conflicts that the 3.7-era pins hit on newer Pythons.
+# Trimmed, conflict-free subset of requirements.txt for cloud builds. Drops the
+# OPTIONAL social-media analyzer stack (spacy / facebook-scraper / rapidfuzz),
+# which the app imports defensively and runs fine without.
+#
+# Version notes (why these exact pins):
+#  * TensorFlow 2.11 requires numpy<1.24 and protobuf<3.20.
+#  * mtcnn pulls in the full `opencv-python` (not headless); recent opencv
+#    (>=4.10) requires numpy>=2, which conflicts with TF. opencv 4.8.1.78 only
+#    needs numpy>=1.21.2, so it coexists with numpy 1.23.5.
+#  * scipy 1.9.3 is numpy-1.23 compatible.
+# All pins verified to have cp310/abi3 manylinux wheels.
 
 # --- Web framework / API ---
 flask==2.2.5
@@ -19,11 +24,11 @@ python-dotenv==0.21.1
 waitress==2.1.2
 
 # --- Computer vision / AI engine ---
-opencv-python-headless==4.12.0.88
+numpy==1.23.5
+tensorflow==2.11.0
+protobuf==3.19.6
+opencv-python==4.8.1.78
 keras-facenet==0.3.2
 mtcnn==0.1.1
-tensorflow==2.11.0
-numpy==1.21.6
 pillow
-scipy==1.7.3
-protobuf==3.19.6
+scipy==1.9.3

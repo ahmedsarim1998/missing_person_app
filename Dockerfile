@@ -3,9 +3,9 @@
 # managed platforms no longer offer the project's original 3.7 runtime.
 FROM python:3.10-slim
 
-# OpenCV (headless) still needs a couple of shared libs at runtime.
+# OpenCV needs a few shared libs at runtime (libgl1 for cv2, plus glib/gomp).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libglib2.0-0 libgomp1 \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
