@@ -103,6 +103,11 @@ class StreamManager:
         self._emb_cache_ts = 0.0
         self._last_alert_at = {}
 
+        # Browser (device-camera) mode: a shared model + a lock so concurrent
+        # request threads don't run TensorFlow inference at the same time.
+        self._model = None
+        self._detect_lock = threading.Lock()
+
     # ---- lifecycle ----------------------------------------------------
     def _ensure_running(self):
         if self._running:
@@ -272,6 +277,27 @@ class StreamManager:
                 annotations.append({"box": box, "label": "Unknown", "color": (0, 0, 255)})
         return annotations
 
+    def detect_frame(self, frame_bgr):
+        """One-shot detection + match for a single browser-supplied frame.
+
+        Used by the 'this device's camera' mode: the browser captures the
+        webcam and posts frames here; recognition + alerting reuse the same
+        pipeline as the server-side stream. Returns JSON-friendly annotations.
+        Callers should hold `self._detect_lock` (TensorFlow isn't re-entrant).
+        """
+        if self._model is None:
+            self._model = FaceModel.get_instance()   # one-time TensorFlow load
+        self._refresh_embeddings()
+        out = []
+        for a in self._detect_and_match(self._model, frame_bgr):
+            x, y, bw, bh = a["box"]
+            out.append({
+                "box": [int(x), int(y), int(bw), int(bh)],
+                "label": a["label"],
+                "match": a["color"] == (0, 200, 0),
+            })
+        return out
+
     def _maybe_alert(self, frame, box, person_id, name, distance):
         now = time.time()
         if now - self._last_alert_at.get(person_id, 0) < self.cooldown:
@@ -352,6 +378,34 @@ def stream_status():
     mgr = StreamManager.instance(current_app._get_current_object())
     return jsonify(status=mgr._status, viewers=mgr._viewers,
                    cached_cases=len(mgr._emb_cache), source=mgr.current_source()), 200
+
+
+@stream_bp.route('/detect', methods=['POST'])
+@admin_required
+def detect_frame():
+    """Device-camera mode: accept one JPEG frame from the browser webcam, run
+    face detection + case matching, and return the boxes/labels to overlay.
+    The heavy video never leaves the browser — only small frames come here."""
+    file = request.files.get('frame')
+    if file is None:
+        return jsonify(msg="No frame uploaded"), 400
+    buf = np.frombuffer(file.read(), np.uint8)
+    frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    if frame is None:
+        return jsonify(msg="Could not decode frame"), 400
+
+    mgr = StreamManager.instance(current_app._get_current_object())
+    # Serialize inference across request threads (TensorFlow isn't re-entrant).
+    if not mgr._detect_lock.acquire(timeout=8):
+        return jsonify(msg="Recognition busy, try again"), 503
+    try:
+        annotations = mgr.detect_frame(frame)
+    except Exception:
+        current_app.logger.exception("Device-camera detection failed")
+        return jsonify(msg="Detection error"), 500
+    finally:
+        mgr._detect_lock.release()
+    return jsonify(annotations=annotations, count=len(annotations)), 200
 
 
 @stream_bp.route('/source', methods=['GET'])

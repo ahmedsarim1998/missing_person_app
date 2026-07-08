@@ -50,6 +50,21 @@
                 </p>
               </div>
               <p class="text-center text-muted-light mt-2 small">Recognition runs in the background, so the video stays smooth. A green box marks a match.</p>
+
+              <!-- Use the viewing device's own camera (works on the deployed site) -->
+              <div class="mt-4 p-3 rounded-1" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)">
+                <h5 class="mb-1">Use this device's camera</h5>
+                <p class="text-muted-light small">Runs on the deployed site with your laptop or phone camera. The video stays on your device; only small frames are sent for matching. Requires HTTPS (or localhost) and camera permission.</p>
+                <div class="text-center rounded-1 overflow-hidden mb-2" style="background:#000;border:1px solid rgba(255,255,255,.1);position:relative;display:inline-block;max-width:100%">
+                  <video id="dev-video" autoplay muted playsinline style="max-width:100%;display:block"></video>
+                  <canvas id="dev-overlay" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
+                </div>
+                <div class="d-flex justify-content-center gap-2">
+                  <button id="dev-start" class="btn-main"><span>Start Device Camera</span></button>
+                  <button id="dev-stop" class="btn-main btn-line"><span>Stop</span></button>
+                </div>
+                <div id="dev-msg" class="text-center small mt-2 text-muted-light">Idle</div>
+              </div>
             </div>
           </div>
         </div>
@@ -152,6 +167,95 @@
       document.getElementById("apply-source").addEventListener("click", applySource);
       sourceInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applySource(); } });
       loadSource();
+
+      // --- Device-camera mode (browser webcam -> server detection) -------
+      var devVideo = document.getElementById("dev-video");
+      var devOverlay = document.getElementById("dev-overlay");
+      var devMsg = document.getElementById("dev-msg");
+      var devStream = null, devRunning = false, devBusy = false;
+      var capCanvas = document.createElement("canvas");   // offscreen capture
+      var CAP_WIDTH = 640;                                 // send frames at this width
+      var DETECT_EVERY_MS = 600;
+
+      function devSetMsg(t) { devMsg.textContent = t; }
+
+      async function devLoop() {
+        if (!devRunning) return;
+        if (!devBusy && devVideo.videoWidth) {
+          devBusy = true;
+          try {
+            var vw = devVideo.videoWidth, vh = devVideo.videoHeight;
+            var scale = vw > CAP_WIDTH ? CAP_WIDTH / vw : 1;
+            var cw = Math.round(vw * scale), ch = Math.round(vh * scale);
+            capCanvas.width = cw; capCanvas.height = ch;
+            capCanvas.getContext("2d").drawImage(devVideo, 0, 0, cw, ch);
+            // Match the overlay's internal resolution to the captured frame so
+            // returned boxes (in capture space) map 1:1; CSS stretches both.
+            if (devOverlay.width !== cw || devOverlay.height !== ch) {
+              devOverlay.width = cw; devOverlay.height = ch;
+            }
+            var blob = await new Promise(function (res) { capCanvas.toBlob(res, "image/jpeg", 0.7); });
+            if (blob && devRunning) {
+              var fd = new FormData();
+              fd.append("frame", blob, "frame.jpg");
+              var r = await LOCAITE.apiPostForm("/api/stream/detect", fd);
+              drawDev(r.annotations || []);
+              var matches = (r.annotations || []).filter(function (a) { return a.match; }).length;
+              devSetMsg(r.count + " face(s) detected" + (matches ? ", " + matches + " match(es) — alert sent" : ""));
+            }
+          } catch (e) {
+            devSetMsg(e.message || "Detection error");
+          } finally {
+            devBusy = false;
+          }
+        }
+        if (devRunning) setTimeout(devLoop, DETECT_EVERY_MS);
+      }
+
+      function drawDev(anns) {
+        var ctx = devOverlay.getContext("2d");
+        ctx.clearRect(0, 0, devOverlay.width, devOverlay.height);
+        ctx.lineWidth = 2; ctx.font = "16px sans-serif"; ctx.textBaseline = "bottom";
+        anns.forEach(function (a) {
+          var b = a.box, col = a.match ? "#28d17c" : "#ff4d4d";
+          ctx.strokeStyle = col; ctx.fillStyle = col;
+          ctx.strokeRect(b[0], b[1], b[2], b[3]);
+          var ty = b[1] > 18 ? b[1] - 4 : b[1] + 16;
+          ctx.fillText(a.label, b[0], ty);
+        });
+      }
+
+      async function devCamStart() {
+        if (devRunning) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          devSetMsg("Camera API unavailable (needs HTTPS or localhost)."); return;
+        }
+        // A device webcam and the server feed can't sensibly run together.
+        stop();
+        devSetMsg("Requesting camera permission…");
+        try {
+          devStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+          devVideo.srcObject = devStream;
+          devRunning = true;
+          devSetMsg("Loading AI model on first detection…");
+          devLoop();
+        } catch (e) {
+          devSetMsg("Could not access camera: " + (e.message || e.name));
+        }
+      }
+
+      function devCamStop() {
+        devRunning = false;
+        if (devStream) { devStream.getTracks().forEach(function (t) { t.stop(); }); devStream = null; }
+        devVideo.srcObject = null;
+        var ctx = devOverlay.getContext("2d");
+        ctx.clearRect(0, 0, devOverlay.width, devOverlay.height);
+        devSetMsg("Idle");
+      }
+
+      document.getElementById("dev-start").addEventListener("click", devCamStart);
+      document.getElementById("dev-stop").addEventListener("click", devCamStop);
+      window.addEventListener("beforeunload", devCamStop);
 
       // Start automatically on load.
       start();
