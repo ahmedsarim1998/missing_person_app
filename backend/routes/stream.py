@@ -14,13 +14,15 @@ Design (why it's smooth):
     one disconnects.
 """
 
+import re
 import threading
 import time
 from datetime import datetime
 
 import cv2
 import numpy as np
-from flask import Blueprint, Response, current_app
+from flask import Blueprint, Response, current_app, request, jsonify
+from flask_jwt_extended import get_jwt_identity
 
 from extensions import db
 from models import MatchAlert, MissingPerson
@@ -29,6 +31,23 @@ from security import admin_required
 from logging_config import audit_logger
 
 stream_bp = Blueprint('stream', __name__)
+
+# Accepted camera sources: a numeric webcam index, or an RTSP/RTMP/HTTP(S) URL
+# (an IP camera / phone-camera stream). Anything else is rejected to keep the
+# server from being pointed at arbitrary local resources.
+_SOURCE_URL_RE = re.compile(r'^(?:rtsp|rtmp|http|https)://', re.IGNORECASE)
+
+
+def _normalize_source(raw):
+    """Return an int (webcam index) or a validated URL string, else None."""
+    src = str(raw).strip()
+    if not src:
+        return None
+    if src.isdigit():
+        return int(src)
+    if _SOURCE_URL_RE.match(src):
+        return src
+    return None
 
 
 def _placeholder(text="Connecting to camera…", w=960, h=540):
@@ -75,6 +94,7 @@ class StreamManager:
         self._viewers = 0
         self._viewers_lock = threading.Lock()
         self._running = False
+        self._source_lock = threading.Lock()
         self._last_view_ts = 0.0
         self._capture_thread = None
         self._recog_thread = None
@@ -114,6 +134,19 @@ class StreamManager:
             self._viewers = max(0, self._viewers - 1)
             self._last_view_ts = time.time()
 
+    # ---- runtime camera source ---------------------------------------
+    def current_source(self):
+        with self._source_lock:
+            return str(self.source)
+
+    def set_source(self, normalized):
+        """Swap the camera source at runtime. `normalized` is an int index or a
+        validated URL (see _normalize_source). The capture loop notices the
+        change on its next iteration and reconnects — no restart needed."""
+        with self._source_lock:
+            self.source = normalized
+        self.app.logger.info("Stream source changed to %s", normalized)
+
     # ---- capture ------------------------------------------------------
     def _open_camera(self):
         cap = cv2.VideoCapture(self.source)
@@ -124,12 +157,24 @@ class StreamManager:
         return cap
 
     def _capture_loop(self):
+        open_src = self.source
         cap = self._open_camera()
         fail_count = 0
         while self._running:
             # Auto-release the camera if nobody is watching.
             if self._viewers == 0 and (time.time() - self._last_view_ts) > self.idle_timeout:
                 break
+
+            # Hot-swap: reconnect if an admin changed the source at runtime.
+            if self.source != open_src:
+                cap.release()
+                open_src = self.source
+                cap = self._open_camera()
+                fail_count = 0
+                self._status = "starting"
+                with self._frame_lock:
+                    self._latest = _placeholder("Connecting to camera…")
+                continue
 
             ok, frame = cap.read()
             if not ok:
@@ -304,7 +349,28 @@ def video_feed():
 @stream_bp.route('/status')
 @admin_required
 def stream_status():
-    from flask import jsonify
     mgr = StreamManager.instance(current_app._get_current_object())
     return jsonify(status=mgr._status, viewers=mgr._viewers,
-                   cached_cases=len(mgr._emb_cache)), 200
+                   cached_cases=len(mgr._emb_cache), source=mgr.current_source()), 200
+
+
+@stream_bp.route('/source', methods=['GET'])
+@admin_required
+def get_source():
+    mgr = StreamManager.instance(current_app._get_current_object())
+    return jsonify(source=mgr.current_source()), 200
+
+
+@stream_bp.route('/source', methods=['POST'])
+@admin_required
+def set_source():
+    data = request.get_json(silent=True) or {}
+    normalized = _normalize_source(data.get('source', ''))
+    if normalized is None:
+        return jsonify(msg="Source must be a webcam index (e.g. 0) or an "
+                           "rtsp:// / http(s):// IP-camera URL"), 400
+    mgr = StreamManager.instance(current_app._get_current_object())
+    mgr.set_source(normalized)
+    audit_logger().info("STREAM_SOURCE_SET source=%s by=%s",
+                        normalized, get_jwt_identity())
+    return jsonify(msg="Camera source updated", source=mgr.current_source()), 200

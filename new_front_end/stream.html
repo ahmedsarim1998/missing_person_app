@@ -34,7 +34,22 @@
                 <button id="start-btn" class="btn-main me-2"><span>Start Feed</span></button>
                 <button id="stop-btn" class="btn-main btn-line"><span>Stop Feed</span></button>
               </div>
-              <p class="text-center text-muted-light mt-2 small">The feed uses the server's camera (source 0 by default; set <code>CAMERA_SOURCE</code> for RTSP/IP cameras). Recognition runs in the background, so the video stays smooth.</p>
+
+              <!-- Connect your own IP / phone camera stream at runtime -->
+              <div class="mt-4 p-3 rounded-1" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)">
+                <label for="cam-source" class="form-label small text-muted-light mb-1">Camera source</label>
+                <div class="d-flex flex-wrap gap-2">
+                  <input id="cam-source" type="text" class="form-control" style="flex:1;min-width:240px"
+                         placeholder="rtsp://user:pass@192.168.1.10:554/stream  or  0 for server webcam">
+                  <button id="apply-source" class="btn-main"><span>Connect</span></button>
+                </div>
+                <div id="source-msg" class="small mt-2"></div>
+                <p class="text-muted-light mt-2 mb-0 small">
+                  Enter an <strong>RTSP</strong> or <strong>HTTP(S)</strong> IP-camera URL (must be reachable from the server),
+                  or a numeric webcam index like <code>0</code> when running locally. The feed switches over live — no restart needed.
+                </p>
+              </div>
+              <p class="text-center text-muted-light mt-2 small">Recognition runs in the background, so the video stays smooth. A green box marks a match.</p>
             </div>
           </div>
         </div>
@@ -107,6 +122,36 @@
       document.getElementById("start-btn").addEventListener("click", start);
       document.getElementById("stop-btn").addEventListener("click", stop);
       window.addEventListener("beforeunload", stop);
+
+      // --- Runtime camera-source control (IP cam / webcam index) ---------
+      var sourceInput = document.getElementById("cam-source");
+      var sourceMsg = document.getElementById("source-msg");
+
+      async function loadSource() {
+        try {
+          var s = await LOCAITE.apiGet("/api/stream/source");
+          if (s && s.source && !sourceInput.value) sourceInput.value = s.source;
+        } catch (e) { /* ignore */ }
+      }
+
+      async function applySource() {
+        var val = sourceInput.value.trim();
+        if (!val) { sourceMsg.innerHTML = '<span class="text-warning">Enter a camera source first.</span>'; return; }
+        sourceMsg.innerHTML = '<span class="text-muted-light">Connecting…</span>';
+        try {
+          var res = await LOCAITE.apiPost("/api/stream/source", { source: val });
+          sourceMsg.innerHTML = '<span class="text-success">Connected to ' + res.source + '. Switching the live feed…</span>';
+          // Reload the feed so the new source is picked up immediately.
+          if (!running) start();
+          else feed.src = "/api/stream/feed?jwt=" + encodeURIComponent(LOCAITE.token() || "") + "&ts=" + Date.now();
+        } catch (err) {
+          sourceMsg.innerHTML = '<span class="text-danger">' + (err.message || "Failed to set source") + '</span>';
+        }
+      }
+
+      document.getElementById("apply-source").addEventListener("click", applySource);
+      sourceInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applySource(); } });
+      loadSource();
 
       // Start automatically on load.
       start();
