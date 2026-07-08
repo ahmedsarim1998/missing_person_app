@@ -1,0 +1,15 @@
+.git
+node_modules
+_archive_review
+**/__pycache__
+**/*.pyc
+backend/logs
+backend/instance/*.db
+backend/instance/*.bak-*
+backend/instance/*.key
+backend/static/uploads
+.pytest_cache
+.diagbuild
+diagrams
+*.md
+!README.md

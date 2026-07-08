@@ -14,6 +14,7 @@ backend/instance/*.key
 # Database
 *.db
 backend/instance/*.db
+backend/instance/*.bak-*
 
 # Logs
 logs/
