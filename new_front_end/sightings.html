@@ -17,17 +17,25 @@
       <div id="top"></div>
       <section class="text-light" style="padding:160px 0 90px;background:var(--bg-dark-1);min-height:100vh">
         <div class="container">
-          <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
-            <div>
-              <h2 class="mb-0">Facebook Sightings</h2>
-              <p class="text-muted-light mb-0">Location updates auto-extracted from monitored Facebook posts. Auto-applied updates overwrite a case's last known location (and are reversible via the audit trail below).</p>
+          <div class="mb-3">
+            <h2 class="mb-0">Facebook Sightings</h2>
+            <p class="text-muted-light mb-0">Paste a Facebook post to auto-extract a last-seen location and update the matching case. Every processed match is logged below (and is reversible).</p>
+          </div>
+
+          <div class="p-3 rounded-1 mb-3" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)">
+            <label for="post-text" class="form-label small text-muted-light mb-1">Paste a Facebook post</label>
+            <textarea id="post-text" class="form-control mb-2" rows="3" placeholder="e.g. URGENT: John Doe was last seen near Gulshan-e-Iqbal, Karachi. Please contact the family if you have any information."></textarea>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <button id="analyze-btn" class="btn-main"><span>Analyze Post</span></button>
+              <span class="text-muted-light small">Tip: the post must contain an <strong>active case's name</strong> and a phrase like “last seen in/near &lt;place&gt;”.</span>
             </div>
-            <div class="d-flex align-items-center">
-              <div class="form-check form-switch me-3 text-light">
-                <input class="form-check-input" type="checkbox" id="demo-toggle" checked>
+            <div class="mt-3 pt-2" style="border-top:1px solid rgba(255,255,255,.08)">
+              <div class="form-check form-switch d-inline-block me-2 text-light align-middle">
+                <input class="form-check-input" type="checkbox" id="demo-toggle">
                 <label class="form-check-label" for="demo-toggle">Demo mode</label>
               </div>
-              <button id="scan-btn" class="btn-main"><span>Scan Now</span></button>
+              <button id="scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Run Demo Scan</span></button>
+              <span class="text-muted-light small ms-2">Generates sample posts from active cases (for testing the flow).</span>
             </div>
           </div>
           <div id="scan-result" class="mb-3"></div>
@@ -73,19 +81,48 @@
           host.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         }
       }
-      document.getElementById("scan-btn").addEventListener("click", async function () {
+      function showSummary(res, s) {
+        if (s.matched === 0) {
+          res.innerHTML = '<div class="alert alert-warning">Scanned ' + s.scanned +
+            " post(s), but <strong>no active case name matched</strong>. Make sure the post contains the exact name of an active case (and a phrase like “last seen in &lt;place&gt;”).</div>";
+        } else if (s.updated === 0) {
+          res.innerHTML = '<div class="alert alert-info">Matched ' + s.matched +
+            " case(s) but <strong>no location could be extracted</strong>. Try phrasing like “last seen near &lt;place&gt;”. See the log below.</div>";
+        } else {
+          res.innerHTML = '<div class="alert alert-success">Matched ' + s.matched +
+            " case(s) and updated " + s.updated + " location(s). See the updated New Location below.</div>";
+        }
+      }
+
+      document.getElementById("analyze-btn").addEventListener("click", async function () {
         var btn = this, res = document.getElementById("scan-result");
-        btn.disabled = true; btn.innerHTML = "<span>Scanning…</span>";
+        var text = (document.getElementById("post-text").value || "").trim();
+        if (!text) { res.innerHTML = '<div class="alert alert-warning">Paste a post first.</div>'; return; }
+        btn.disabled = true; btn.innerHTML = "<span>Analyzing…</span>";
         try {
-          var demo = document.getElementById("demo-toggle").checked;
-          var s = await LOCAITE.apiPost("/api/admin/fb/scan", { demo: demo });
-          res.innerHTML = '<div class="alert alert-success">Scan complete — scanned ' + s.scanned +
-            ", matched " + s.matched + ", updated " + s.updated + ", skipped " + s.skipped + ".</div>";
+          var s = await LOCAITE.apiPost("/api/admin/fb/scan", {
+            posts: [{ post_id: "manual-" + Date.now(), text: text }],
+          });
+          showSummary(res, s);
           load();
         } catch (err) {
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         } finally {
-          btn.disabled = false; btn.innerHTML = "<span>Scan Now</span>";
+          btn.disabled = false; btn.innerHTML = "<span>Analyze Post</span>";
+        }
+      });
+
+      document.getElementById("scan-btn").addEventListener("click", async function () {
+        var btn = this, res = document.getElementById("scan-result");
+        btn.disabled = true; btn.innerHTML = "<span>Scanning…</span>";
+        try {
+          var s = await LOCAITE.apiPost("/api/admin/fb/scan", { demo: true });
+          showSummary(res, s);
+          load();
+        } catch (err) {
+          res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
+        } finally {
+          btn.disabled = false; btn.innerHTML = "<span>Run Demo Scan</span>";
         }
       });
       load();

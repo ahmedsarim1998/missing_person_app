@@ -20,6 +20,11 @@
           <div class="text-center mb-4">
             <h2>Live Surveillance Feed</h2>
             <p class="text-muted-light">Faces are detected in real time and matched against active cases. A green box marks a match; an alert is sent to the admin dashboard.</p>
+            <div class="alert alert-info d-inline-block text-start" style="max-width:760px">
+              <strong>Using this on the deployed site?</strong> The cloud server has no camera of its own — scroll down to
+              <strong>“Use this device's camera”</strong> to run detection with your laptop or phone camera.
+              The <em>Start Feed</em> button below is for a server webcam or an IP/RTSP camera (mainly when running locally).
+            </div>
           </div>
           <div class="row justify-content-center">
             <div class="col-lg-9">
@@ -257,8 +262,10 @@
       document.getElementById("dev-stop").addEventListener("click", devCamStop);
       window.addEventListener("beforeunload", devCamStop);
 
-      // Start automatically on load.
-      start();
+      // Don't auto-start the server feed: on the cloud there's no server camera,
+      // so it would just show "No camera signal". The user picks a source
+      // explicitly (device camera, or Start Feed for a local/IP camera).
+      setStatus("idle");
     }
   </script>
 </body>

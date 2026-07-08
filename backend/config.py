@@ -71,7 +71,11 @@ class BaseConfig:
     STREAM_IDLE_TIMEOUT = float(os.environ.get("STREAM_IDLE_TIMEOUT", "8"))  # release camera after N idle secs
     EMBED_CACHE_TTL = float(os.environ.get("EMBED_CACHE_TTL", "10"))         # refresh case embeddings every N secs
     ALERT_COOLDOWN_SECONDS = int(os.environ.get("ALERT_COOLDOWN_SECONDS", "30"))
-    MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.65"))
+    # FaceNet embeddings here are L2-normalized, so same-person distances run
+    # ~0.3-0.9 and different-people ~1.1-1.4. 0.95 catches genuine matches
+    # (a live frame vs a stored photo) while staying below the different-person
+    # floor. Lower = stricter. (The old 0.65 default rejected real matches.)
+    MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.95"))
 
     # Access-token lifetime (minutes)
     from datetime import timedelta

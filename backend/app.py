@@ -50,6 +50,7 @@ def create_app(config_name=None):
     def health():
         return jsonify(status='ok'), 200
 
+    _register_uploads(app)
     _register_frontend(app)
 
     with app.app_context():
@@ -101,6 +102,27 @@ def _register_error_handlers(app):
     def _500(e):
         app.logger.exception("Unhandled server error")
         return jsonify(msg="Internal server error"), 500
+
+
+def _register_uploads(app):
+    """Serve uploaded case photos + match snapshots from UPLOAD_FOLDER.
+
+    Case photo_path / snapshot_path are stored as '/static/uploads/...'. By
+    serving that prefix explicitly from UPLOAD_FOLDER (instead of relying on
+    Flask's default static dir), UPLOAD_FOLDER can live on a persistent volume
+    (e.g. /data/uploads) so photos survive restarts/redeploys.
+    """
+    upload_root = os.path.abspath(app.config['UPLOAD_FOLDER'])
+
+    @app.route('/static/uploads/<path:filename>')
+    def uploaded_file(filename):
+        full = os.path.abspath(os.path.join(upload_root, filename))
+        # Block path traversal outside the upload root.
+        if not full.startswith(upload_root):
+            abort(404)
+        if os.path.isfile(full):
+            return send_from_directory(upload_root, filename)
+        abort(404)
 
 
 def _register_frontend(app):
