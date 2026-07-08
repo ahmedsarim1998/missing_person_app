@@ -10,9 +10,12 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Install Python deps first so Docker can cache this layer.
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Install Python deps first so Docker can cache this layer. Uses the trimmed,
+# 3.10-pinned deploy list (the full requirements.txt targets Python 3.7 and its
+# optional analyzer deps conflict on newer Pythons).
+COPY backend/requirements-deploy.txt ./backend/requirements-deploy.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r backend/requirements-deploy.txt
 
 # App source.
 COPY . .

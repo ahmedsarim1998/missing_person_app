@@ -1,0 +1,29 @@
+# Deployment requirements — pinned for the Docker image (Python 3.10).
+#
+# This is a trimmed, conflict-free subset of requirements.txt used for cloud
+# builds. It drops the OPTIONAL social-media analyzer stack (spacy /
+# facebook-scraper / rapidfuzz), which the app imports defensively and runs
+# fine without. scipy and protobuf are pinned to versions that are compatible
+# with numpy 1.21.6 and TensorFlow 2.11 on Python 3.10, avoiding the resolver
+# conflicts that the 3.7-era pins hit on newer Pythons.
+
+# --- Web framework / API ---
+flask==2.2.5
+flask-sqlalchemy==3.0.5
+flask-cors==5.0.0
+flask-jwt-extended==4.6.0
+werkzeug==2.2.3
+python-dotenv==0.21.1
+
+# --- Production server ---
+waitress==2.1.2
+
+# --- Computer vision / AI engine ---
+opencv-python-headless==4.12.0.88
+keras-facenet==0.3.2
+mtcnn==0.1.1
+tensorflow==2.11.0
+numpy==1.21.6
+pillow
+scipy==1.7.3
+protobuf==3.19.6
