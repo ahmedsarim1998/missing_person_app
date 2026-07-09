@@ -36,5 +36,8 @@ scipy==1.9.3
 # --- Social-media analyzer (live Facebook group scanning) ---
 # rapidfuzz has no numpy/TF dependency; facebook-scraper pulls only web-scraping
 # libs (requests/lxml/dateparser), so neither conflicts with the CV stack above.
+# lxml_html_clean: lxml>=5.2 moved lxml.html.clean into this separate package;
+# requests-html (via facebook-scraper) still imports it, so install it explicitly.
 rapidfuzz==3.9.7
 facebook-scraper==0.2.59
+lxml_html_clean==0.4.1
