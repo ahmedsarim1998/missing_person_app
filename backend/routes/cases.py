@@ -1,7 +1,7 @@
 import re
 from flask import Blueprint, request, jsonify, current_app
 from extensions import db
-from models import MissingPerson
+from models import MissingPerson, FacebookSighting
 from werkzeug.utils import secure_filename
 import os
 import cv2
@@ -136,6 +136,38 @@ def get_case(case_id):
         "photo_path": case.photo_path,
         "photos": additional_photos
     }), 200
+
+@cases_bp.route('/<int:case_id>/sightings', methods=['GET'])
+def case_sightings(case_id):
+    """Public: sightings for one case, so the family/reporter viewing the case
+    can see where the person was spotted and the image the system matched on.
+
+    Only surfaces *meaningful* sightings — those that updated the location or
+    produced a face-recognition result — newest first.
+    """
+    MissingPerson.query.get_or_404(case_id)
+    rows = (FacebookSighting.query
+            .filter_by(missing_person_id=case_id)
+            .order_by(FacebookSighting.created_at.desc())
+            .limit(20).all())
+    result = []
+    for s in rows:
+        images = s.image_paths.split(",") if s.image_paths else []
+        if not s.new_location and not images:
+            continue  # skip empty/noise entries
+        result.append({
+            "id": s.id,
+            "new_location": s.new_location,
+            "previous_location": s.previous_location,
+            "applied": s.applied,
+            "match_score": s.match_score,
+            "images": images,
+            "face_match": s.face_match,
+            "post_url": s.post_url,
+            "timestamp": s.created_at,
+        })
+    return jsonify(result), 200
+
 
 @cases_bp.route('/<int:case_id>/status', methods=['PUT'])
 @admin_required

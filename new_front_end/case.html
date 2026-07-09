@@ -9,6 +9,12 @@
   <link href="css/plugins.css" rel="stylesheet" type="text/css">
   <link href="css/style.css" rel="stylesheet" type="text/css">
   <link id="colors" href="css/colors/scheme-1.css" rel="stylesheet" type="text/css">
+  <style>
+    .sighting-card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; }
+    .sighting-alert { background: #fff3cd; color: #5c4600; border-radius: 12px; }
+    .sighting-alert strong { color: inherit; }
+    .sighting-img { height: 120px; width: 120px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(0,0,0,.15); }
+  </style>
 </head>
 <body>
   <div id="wrapper">
@@ -19,6 +25,7 @@
         <div class="container">
           <a href="cases.html" class="text-light"><i class="icofont-rounded-left"></i> Back to all cases</a>
           <div id="detail" class="mt-4"><p>Loading…</p></div>
+          <div id="sightings-panel" class="mt-5"></div>
         </div>
       </section>
     </div>
@@ -74,13 +81,70 @@
       });
     }
 
+    function esc(v) {
+      return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    function renderSightings(list) {
+      var panel = document.getElementById("sightings-panel");
+      if (!list || !list.length) { panel.innerHTML = ""; return; }
+
+      // Most-recent sighting shown as a prominent alert banner at the top.
+      var latest = list[0];
+      var banner = "";
+      if (latest.new_location) {
+        banner =
+          '<div class="sighting-alert p-3 mb-3">' +
+          '<div class="fw-bold mb-1">🔔 New possible sighting</div>' +
+          "This person may have been spotted near <strong>" + esc(latest.new_location) +
+          "</strong> on " + new Date(latest.timestamp).toLocaleString() +
+          ", detected from a social-media post. <strong>Please review the image below to confirm it is the right person.</strong></div>";
+      }
+
+      var cards = list.map(function (s) {
+        var imgs = (s.images && s.images.length)
+          ? '<div class="d-flex flex-wrap gap-2 mt-2">' + s.images.map(function (u) {
+              return '<img class="sighting-img" src="' + esc(u) + '" alt="matched image">';
+            }).join("") + "</div>"
+          : "";
+        var faceOk = s.face_match && /^Face match/i.test(s.face_match);
+        var face = s.face_match
+          ? '<span class="badge ' + (faceOk ? "bg-success" : "bg-secondary") + ' ms-2">' + esc(s.face_match) + "</span>"
+          : "";
+        var loc = s.new_location
+          ? "Spotted near <strong>" + esc(s.new_location) + "</strong>"
+          : "Photo submitted for review";
+        var post = s.post_url ? ' · <a href="' + esc(s.post_url) + '" target="_blank" rel="noopener" class="text-info">view source post</a>' : "";
+        return (
+          '<div class="sighting-card p-3 mb-2">' +
+          '<div class="d-flex flex-wrap align-items-center">' +
+          "<span>" + loc + "</span>" + face +
+          '<span class="text-muted-light small ms-auto">' + new Date(s.timestamp).toLocaleString() + post + "</span>" +
+          "</div>" + imgs +
+          (s.new_location ? '<div class="text-muted-light small mt-2">Previous location: ' + esc(s.previous_location || "—") + " → now " + esc(s.new_location) + "</div>" : "") +
+          "</div>"
+        );
+      }).join("");
+
+      panel.innerHTML =
+        '<h4 class="mb-3">Sightings &amp; Alerts</h4>' + banner + cards +
+        '<p class="text-muted-light small mt-2">Sightings are auto-detected from social-media posts and are unverified. Compare the image above with the person you are looking for before acting on a location.</p>';
+    }
+
     async function load() {
       try {
         var c = await LOCAITE.apiGet("/api/cases/" + id);
         render(c);
       } catch (err) {
         detail.innerHTML = '<div class="alert alert-danger">Case not found: ' + err.message + "</div>";
+        return;
       }
+      try {
+        var sightings = await LOCAITE.apiGet("/api/cases/" + id + "/sightings");
+        renderSightings(sightings);
+      } catch (err) { /* sightings are optional; ignore if unavailable */ }
     }
     if (!id) detail.innerHTML = '<div class="alert alert-warning">No case id provided.</div>';
     else load();
