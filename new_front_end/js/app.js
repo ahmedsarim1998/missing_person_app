@@ -130,7 +130,7 @@
     var adminBlock = isAdmin()
       ? '<li><a class="menu-item" href="#">Admin</a><ul>' +
         '<li><a href="dashboard.html">Dashboard</a></li>' +
-        '<li><a href="sightings.html">Facebook Sightings</a></li>' +
+        '<li><a href="sightings.html">Social Media Sightings</a></li>' +
         "</ul></li>"
       : "";
     return [
