@@ -63,22 +63,12 @@
             </div>
           </div>
 
-          <!-- SECONDARY: automated sources (best-effort) -->
+          <!-- SECONDARY: Facebook analyzer demo -->
           <div class="fb-auto p-3 mb-3">
-            <div class="small text-muted-light mb-2"><strong class="text-light">Automated scanning</strong> — searches a live source and runs matches through the same pipeline.</div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-              <input id="reddit-query" type="text" class="form-control form-control-sm" style="max-width:220px" placeholder="Reddit search, e.g. a case name">
-              <input id="reddit-sub" type="text" class="form-control form-control-sm" style="max-width:150px" placeholder="subreddit (optional)">
-              <button id="reddit-scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Scan Reddit</span></button>
-              <span class="text-muted-light small">Searches Reddit's official API (needs <code>REDDIT_CLIENT_ID</code> + <code>REDDIT_CLIENT_SECRET</code>) and runs matches through the same pipeline.</span>
-            </div>
+            <div class="small text-muted-light mb-2"><strong class="text-light">Facebook analyzer — demo</strong> — generates sample Facebook-style posts from your active cases and runs them through the same analysis pipeline, so you can watch the automated flow end-to-end.</div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <div class="form-check form-switch d-inline-block me-1 text-light align-middle">
-                <input class="form-check-input" type="checkbox" id="demo-toggle">
-                <label class="form-check-label small" for="demo-toggle">Demo mode</label>
-              </div>
-              <button id="scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Run Demo Scan</span></button>
-              <span class="text-muted-light small ms-1">Generates sample posts from active cases (to test the flow).</span>
+              <button id="scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Run Facebook Demo Scan</span></button>
+              <span class="text-muted-light small ms-1">Live Facebook scraping is blocked by Facebook, so paste real posts above; this demo shows the same pipeline on synthetic posts.</span>
             </div>
           </div>
 
@@ -315,31 +305,7 @@
         } catch (err) {
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         } finally {
-          btn.disabled = false; btn.innerHTML = "<span>Run Demo Scan</span>";
-        }
-      });
-
-      document.getElementById("reddit-scan-btn").addEventListener("click", async function () {
-        var btn = this, res = document.getElementById("scan-result");
-        var query = (document.getElementById("reddit-query").value || "").trim();
-        var sub = (document.getElementById("reddit-sub").value || "").trim();
-        if (!query) { res.innerHTML = '<div class="alert alert-warning">Enter a Reddit search query first (e.g. a case name).</div>'; return; }
-        btn.disabled = true; btn.innerHTML = "<span>Searching Reddit…</span>";
-        res.innerHTML = '<div class="alert alert-info">Searching Reddit for “' + esc(query) + '”…</div>';
-        try {
-          var s = await LOCAITE.apiPost("/api/admin/reddit/scan", { query: query, subreddit: sub, limit: 25 });
-          if (s.scanned === 0) {
-            res.innerHTML = '<div class="alert alert-warning">Reddit returned <strong>0 posts</strong> for that query. Try a broader search or a specific subreddit.</div>';
-          } else if (s.matched === 0) {
-            res.innerHTML = '<div class="alert alert-info">Scanned <strong>' + s.scanned + '</strong> Reddit post(s), but none matched an active case name. (Reddit scraping works — there was just no match.)</div>';
-          } else {
-            showSummary(res, s);
-          }
-          load();
-        } catch (err) {
-          res.innerHTML = '<div class="alert alert-danger">Reddit scan failed: ' + err.message + "</div>";
-        } finally {
-          btn.disabled = false; btn.innerHTML = "<span>Scan Reddit</span>";
+          btn.disabled = false; btn.innerHTML = "<span>Run Facebook Demo Scan</span>";
         }
       });
 

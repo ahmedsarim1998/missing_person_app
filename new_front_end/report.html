@@ -43,6 +43,18 @@
                     <label class="form-label">Identifiers / Physical Description</label>
                     <textarea name="identifiers" rows="3" class="form-control" placeholder="Height, clothing, marks, etc."></textarea>
                   </div>
+                  <div class="p-3 rounded-1 mb-3" style="background:rgba(126,199,72,.06);border:1px solid rgba(126,199,72,.2)">
+                    <label class="form-label mb-1">Your contact <span class="text-muted-light">(so we can alert you about updates on this person)</span></label>
+                    <div class="row g-2">
+                      <div class="col-md-6">
+                        <input type="tel" name="reporter_phone" class="form-control" placeholder="Phone, e.g. 0300-1234567">
+                      </div>
+                      <div class="col-md-6">
+                        <input type="email" name="reporter_email" class="form-control" placeholder="Email for alerts">
+                      </div>
+                    </div>
+                    <div class="form-text text-muted-light small">You'll be alerted when a new sighting location or a camera face-match is found.</div>
+                  </div>
                   <div class="mb-3">
                     <label class="form-label">Photos * <span class="text-muted-light">(1–10 clear face photos; the first becomes the main display photo)</span></label>
                     <input type="file" name="photos" class="form-control" accept="image/png,image/jpeg,image/webp" multiple required>
@@ -87,6 +99,8 @@
         fd.append("national_id", f.national_id.value.trim());
         fd.append("last_location", f.last_location.value.trim());
         fd.append("identifiers", f.identifiers.value.trim());
+        fd.append("reporter_phone", f.reporter_phone.value.trim());
+        fd.append("reporter_email", f.reporter_email.value.trim());
         for (var i = 0; i < f.photos.files.length; i++) fd.append("photos", f.photos.files[i]);
         btn.disabled = true; btn.innerHTML = "<span>Processing faces…</span>";
         try {

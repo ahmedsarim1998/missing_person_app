@@ -304,13 +304,22 @@ class StreamManager:
             return
         self._last_alert_at[person_id] = now
         snapshot = self._save_snapshot(frame, box, person_id)
+        source = self.current_source()
         with self.app.app_context():
             db.session.add(MatchAlert(
                 missing_person_id=person_id, confidence=float(distance),
                 status='pending', snapshot_path=snapshot, timestamp=datetime.utcnow(),
-                camera_source=self.current_source(),
+                camera_source=source,
             ))
             db.session.commit()
+            # Alert the reporter that their missing person was seen on a camera.
+            case = db.session.get(MissingPerson, person_id)
+            if case is not None:
+                from notify_service import notify_case_update
+                notify_case_update(
+                    case, "Camera match: %s detected on %s" % (name, source),
+                    "%s may have been detected on camera %s. Open their case page "
+                    "to review the snapshot and confirm." % (name, source))
         audit_logger().info("MATCH_ALERT person_id=%s name=%s dist=%.3f", person_id, name, distance)
 
     def _save_snapshot(self, frame, box, person_id):

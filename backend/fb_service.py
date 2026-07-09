@@ -20,6 +20,7 @@ from werkzeug.utils import secure_filename
 from extensions import db
 from models import MissingPerson, FacebookSighting
 from utils import fb_analyzer as fa
+from notify_service import notify_case_update
 
 _ALLOWED_IMG = {"png", "jpg", "jpeg", "webp"}
 
@@ -80,6 +81,10 @@ def process_posts(posts):
             case.last_location_source = 'facebook'
             applied = True
             summary["updated"] += 1
+            notify_case_update(
+                case, "New sighting: %s spotted near %s" % (case.name, location),
+                "%s may have been spotted near %s (from a social-media post). "
+                "Open their case page to review and confirm." % (case.name, location))
 
         # Per-post detail so the UI can show exactly what was extracted.
         summary["results"].append({
@@ -299,6 +304,10 @@ def analyze_manual_post(text, image_files, upload_folder, match_threshold,
         case.last_location_updated_at = datetime.utcnow()
         case.last_location_source = "facebook"
         applied = True
+        notify_case_update(
+            case, "New sighting: %s spotted near %s" % (case.name, location),
+            "%s may have been spotted near %s (from a social-media post). "
+            "Open their case page to review and confirm." % (case.name, location))
 
     result["previous_location"] = previous_location
     result["new_location"] = location

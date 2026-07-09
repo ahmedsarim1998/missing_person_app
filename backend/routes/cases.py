@@ -90,9 +90,13 @@ def create_case():
     national_id = (request.form.get('national_id') or '').strip()
     last_location = (request.form.get('last_location') or '').strip()
     identifiers = (request.form.get('identifiers') or '').strip()
+    reporter_phone = (request.form.get('reporter_phone') or '').strip()
+    reporter_email = (request.form.get('reporter_email') or '').strip()
 
     if not name:
         return jsonify({"msg": "Name is required"}), 400
+    if reporter_email and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', reporter_email):
+        return jsonify({"msg": "Invalid email address"}), 400
 
     # Validate NIC
     if national_id and not re.match(r'^\d{5}-\d{7}-\d{1}$', national_id):
@@ -110,6 +114,8 @@ def create_case():
         photo_path=main_photo,
         embedding_blob=saved_embeddings,
         reporter=get_jwt_identity(),
+        reporter_phone=reporter_phone,
+        reporter_email=reporter_email,
     )
 
     db.session.add(new_case)
@@ -148,6 +154,10 @@ def get_case(case_id):
         "photo_path": case.photo_path,
         "photos": additional_photos,
         "reporter": case.reporter,
+        "reporter_phone": case.reporter_phone,
+        "reporter_email": case.reporter_email,
+        "last_location_updated_at": case.last_location_updated_at.isoformat() + "Z" if case.last_location_updated_at else None,
+        "last_location_source": case.last_location_source,
     }), 200
 
 
@@ -176,6 +186,13 @@ def edit_case(case_id):
         case.last_location = (data.get('last_location') or '').strip()
     if 'identifiers' in data:
         case.identifiers = (data.get('identifiers') or '').strip()
+    if 'reporter_phone' in data:
+        case.reporter_phone = (data.get('reporter_phone') or '').strip()
+    if 'reporter_email' in data:
+        email = (data.get('reporter_email') or '').strip()
+        if email and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            return jsonify({"msg": "Invalid email address"}), 400
+        case.reporter_email = email
 
     db.session.commit()
     audit_logger().info("CASE_EDIT id=%s by=%s", case_id, identity)

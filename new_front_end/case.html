@@ -52,8 +52,22 @@
       var badge = c.status === "solved"
         ? '<span class="badge bg-success">Solved</span>'
         : '<span class="badge bg-danger">Active</span>';
+      // "Last seen at" note: when + how the location was last updated.
+      var locNote = "";
+      if (c.last_location_updated_at) {
+        var src = c.last_location_source === "facebook" ? "social-media sighting" : (c.last_location_source || "update");
+        locNote = ' <span class="text-muted-light small d-block">updated ' +
+          new Date(c.last_location_updated_at).toLocaleString() + " · " + esc(src) + "</span>";
+      }
+
       // An admin, or the user who reported the case, may edit it.
       var canEdit = LOCAITE.isAdmin() || (c.reporter && LOCAITE.username() === c.reporter);
+      // Reporter contact (alerts go here) — only shown to those who can edit.
+      var contactRow = "";
+      if (canEdit && (c.reporter_phone || c.reporter_email)) {
+        contactRow = "<tr><th>Alerts sent to</th><td>" +
+          esc([c.reporter_phone, c.reporter_email].filter(Boolean).join(" · ")) + "</td></tr>";
+      }
       var controls = '<div class="mt-4 d-flex flex-wrap gap-2">';
       if (canEdit) controls += '<button id="edit-case" class="btn-main btn-line"><span>Edit details</span></button>';
       if (LOCAITE.isAdmin()) controls += '<button id="toggle-status" class="btn-main"><span>Mark as ' +
@@ -70,9 +84,10 @@
         '<div class="d-flex align-items-center mb-2"><h2 class="mb-0 me-3">' + esc(c.name || "Unknown") + "</h2>" + badge + "</div>" +
         '<table class="table table-dark table-borderless"><tbody>' +
         "<tr><th style='width:200px'>National ID</th><td>" + esc(c.national_id || "—") + "</td></tr>" +
-        "<tr><th>Last Known Location</th><td>" + esc(c.last_location || "—") + "</td></tr>" +
+        "<tr><th>Last seen at</th><td>" + esc(c.last_location || "—") + locNote + "</td></tr>" +
         "<tr><th>Identifiers</th><td>" + esc(c.identifiers || "—") + "</td></tr>" +
         "<tr><th>Status</th><td>" + esc(c.status) + "</td></tr>" +
+        contactRow +
         "</tbody></table>" + controls +
         "</div></div>";
 
@@ -102,6 +117,11 @@
         '<input id="e-loc" class="form-control" value="' + esc(c.last_location || "") + '"></div>' +
         '<div class="mb-3"><label class="form-label">Identifiers / Physical Description</label>' +
         '<textarea id="e-ids" class="form-control" rows="3">' + esc(c.identifiers || "") + "</textarea></div>" +
+        '<div class="row g-2 mb-3">' +
+        '<div class="col-md-6"><label class="form-label">Alert phone</label>' +
+        '<input id="e-phone" class="form-control" value="' + esc(c.reporter_phone || "") + '"></div>' +
+        '<div class="col-md-6"><label class="form-label">Alert email</label>' +
+        '<input id="e-email" class="form-control" value="' + esc(c.reporter_email || "") + '"></div></div>' +
         '<div class="d-flex gap-2">' +
         '<button id="save-case" class="btn-main"><span>Save changes</span></button>' +
         '<button id="cancel-edit" class="btn-main btn-line"><span>Cancel</span></button>' +
@@ -115,6 +135,8 @@
           national_id: document.getElementById("e-nid").value.trim(),
           last_location: document.getElementById("e-loc").value.trim(),
           identifiers: document.getElementById("e-ids").value.trim(),
+          reporter_phone: document.getElementById("e-phone").value.trim(),
+          reporter_email: document.getElementById("e-email").value.trim(),
         };
         if (!payload.name) { msg.innerHTML = '<div class="alert alert-danger">Name cannot be empty.</div>'; return; }
         btn.disabled = true; btn.innerHTML = "<span>Saving…</span>";

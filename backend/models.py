@@ -25,6 +25,8 @@ class MissingPerson(db.Model):
     last_location_updated_at = db.Column(db.DateTime, nullable=True) # When last_location was last changed
     last_location_source = db.Column(db.String(50), nullable=True) # 'manual' or 'facebook'
     reporter = db.Column(db.String(80), nullable=True) # username who reported the case (owner of its alerts)
+    reporter_phone = db.Column(db.String(40), nullable=True)  # contact for alert notifications
+    reporter_email = db.Column(db.String(120), nullable=True) # contact for alert notifications
 
 class MatchAlert(db.Model):
     id = db.Column(db.Integer, primary_key=True)
