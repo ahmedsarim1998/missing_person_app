@@ -82,20 +82,56 @@ def best_name_match(text, candidates):
 # ---------------------------------------------------------------------------
 # Location extraction
 # ---------------------------------------------------------------------------
-# Phrases that typically precede a last-seen location in a missing-person post.
-_LOCATION_TRIGGERS = re.compile(
-    r"(?:last\s+seen|last\s+spotted|spotted|seen|missing\s+from|"
-    r"went\s+missing\s+(?:from|near|at)|disappeared\s+(?:from|near|at)|"
-    r"reported\s+(?:from|near|at))\s+"
-    r"(?:at|near|in|from|around)?\s*",
+# Real missing-person posts come in many shapes: free-form sentences ("...was
+# last seen near Gulshan..."), and structured/labelled forms ("Last seen: near
+# bufferzone Karachi", "Location - Clifton Block 5"). The extractor below handles
+# both, tolerates any separator (space/colon/dash/comma) after the trigger, and
+# does NOT require the place to be Capitalised (so "bufferzone karachi" works).
+
+# Strong phrases that introduce a last-seen location. Ordered longest-first so
+# the most specific alternative wins at a given position.
+_PHRASE_TRIGGER = re.compile(
+    r"\b(?:"
+    r"last\s*known\s*location|last\s*seen\s*(?:at|near|in|around)?|"
+    r"last\s*location|went\s*missing\s*(?:from|near|at)|"
+    r"missing\s*(?:from|near|at)|disappeared\s*(?:from|near|at)|"
+    r"spotted\s*(?:at|near|in|around)?|seen\s*(?:at|near|in|around)|"
+    r"reported\s*(?:from|near|at)"
+    r")"
+    r"\s*[:\-–—,]?\s*"                       # optional separator
+    r"(?:at|near|in|from|around|close\s+to)?\s*",      # optional preposition
     re.IGNORECASE,
 )
 
-# After a trigger, grab a location-looking span: capitalized words joined by
-# spaces/commas. A '.' is NOT part of a token, so the span stops at a sentence
-# boundary (e.g. "Lahore. Contact" -> "Lahore").
-_LOCATION_SPAN = re.compile(
-    r"([A-Z][\w&'-]*(?:[ ,]+(?:[A-Z][\w&'-]*|the|of|and|near))*)"
+# Labelled fields ("Location: X", "Area - Y"). These generic words are only
+# treated as a location cue when followed by an explicit ':' or '-' separator,
+# to avoid false positives on the bare word in a sentence.
+_LABEL_TRIGGER = re.compile(
+    r"\b(?:location|address|area|place|last\s*location|last\s*known\s*location)"
+    r"\s*[:\-–—]\s*"
+    r"(?:at|near|in|from|around|close\s+to)?\s*",
+    re.IGNORECASE,
+)
+
+# Once we're reading a location, these words signal it has ended (contact info,
+# physical description, etc.). Kept conservative so real place names survive.
+_STOP = re.compile(
+    r"\b(?:please|kindly|pls|contact|call|inform|informed|information|"
+    r"if\s+you|whats?app|phone|mobile|cell|helpline|reward|"
+    r"age|father|mother|son|daughter|brother|sister|wearing|wore|"
+    r"height|complexion|cnic|nic|dob|since|reward|"
+    # time expressions that often trail the place
+    r"last\s+night|yesterday|today|tonight|tomorrow|"
+    r"this\s+(?:morning|afternoon|evening|night)|"
+    r"morning|afternoon|evening|night|noon|ago)\b",
+    re.IGNORECASE,
+)
+
+# A trailing clock time ("around 5pm", "at 10:30"). Requires a time word (am/pm)
+# or a preceding around/at/about + number, so it never trims "Block 5"/"Phase 6".
+_TRAIL_TIME = re.compile(
+    r"\s+(?:(?:around|at|about)\s+\d.*|\d{1,2}(?:[:.]\d{2})?\s*[ap]\.?m\.?.*)$",
+    re.IGNORECASE,
 )
 
 # Lazily-loaded spaCy model (optional). If unavailable we fall back to regex only.
@@ -119,66 +155,87 @@ def _get_nlp():
 def _clean_location(loc):
     if not loc:
         return None
-    loc = loc.strip(" .,:;-\n\t")
-    # collapse internal whitespace
+    # Trim the span at the first line break or sentence end, then at any stop
+    # word (contact info / description that often follows the place).
+    loc = re.split(r"[\r\n]", loc, 1)[0]
+    loc = re.split(r"[.!?](?:\s|$)", loc, 1)[0]
+    stop = _STOP.search(loc)
+    if stop:
+        loc = loc[:stop.start()]
+    loc = _TRAIL_TIME.sub("", loc)   # strip a trailing clock time
+    # Drop a leading preposition that slipped through ("near X" -> "X").
+    loc = re.sub(r"^\s*(?:at|near|in|from|around|close\s+to)\s+", "", loc,
+                 flags=re.IGNORECASE)
+    loc = loc.strip(" \t\r\n.,:;-–—")
     loc = re.sub(r"\s+", " ", loc)
+    # Locations are short; keep at most 6 words to avoid trailing sentence junk.
+    words = loc.split()
+    if len(words) > 6:
+        loc = " ".join(words[:6])
+    loc = loc.strip(" \t\r\n.,:;-–—")
     if len(loc) < MIN_LOCATION_LEN:
         return None
+    if not re.search(r"[A-Za-z]", loc):   # must contain a letter
+        return None
     return loc
+
+
+def _regex_candidates(text):
+    """All location candidates from phrase + labelled triggers, best-first
+    (most words, then longest)."""
+    cands = []  # (word_count, length, location)
+    for trigger in (_PHRASE_TRIGGER, _LABEL_TRIGGER):
+        for m in trigger.finditer(text):
+            loc = _clean_location(text[m.end(): m.end() + 120])
+            if loc:
+                cands.append((len(loc.split()), len(loc), loc))
+    cands.sort(reverse=True)
+    # de-dupe while preserving order
+    seen, ordered = set(), []
+    for _, _, loc in cands:
+        key = loc.lower()
+        if key not in seen:
+            seen.add(key)
+            ordered.append(loc)
+    return ordered
 
 
 def extract_location(text):
     """Return (location_str_or_None, confidence_0_to_1).
 
     Strategy:
-      1. Find a trigger phrase ("last seen near ...") and read the span after it.
-      2. If spaCy is available, refine using GPE/LOC named entities (prefer one
-         that appears after the trigger). spaCy presence raises confidence.
+      1. Find a trigger phrase or labelled field and read the location after it,
+         trimming at line/sentence ends and contact-info stop-words.
+      2. If spaCy is available, refine to a real GPE/LOC entity within the
+         candidate (raises confidence); otherwise use the regex span directly.
     """
     if not text:
         return None, 0.0
 
-    # A post can contain several trigger words ("...you seen X? ...spotted at Y").
-    # Collect a candidate location after each, then prefer the most place-like
-    # one (more words first, then longer) rather than just the first hit.
-    trigger_loc = None
-    trigger_pos = None
-    candidates = []  # (word_count, length, location, position)
-    for m in _LOCATION_TRIGGERS.finditer(text):
-        pos = m.end()
-        tail = text[pos: pos + 80]
-        span = _LOCATION_SPAN.search(tail)
-        if not span:
-            continue
-        loc = _clean_location(span.group(1))
-        if loc:
-            candidates.append((len(loc.split()), len(loc), loc, pos))
-    if candidates:
-        candidates.sort(reverse=True)  # most words, then longest
-        _, _, trigger_loc, trigger_pos = candidates[0]
+    candidates = _regex_candidates(text)
+    best = candidates[0] if candidates else None
 
     nlp = _get_nlp()
+    if nlp is not None and best is not None:
+        # Prefer a named place entity found inside the regex candidate.
+        doc = nlp(best)
+        geos = [e.text for e in doc.ents if e.label_ in ("GPE", "LOC", "FAC")]
+        if geos:
+            refined = _clean_location(", ".join(geos))
+            if refined:
+                return refined, 0.9
+
+    if best:
+        return best, 0.7
+
+    # No trigger matched — last resort: a spaCy place entity anywhere in the text.
     if nlp is not None:
         doc = nlp(text)
-        geos = [ent for ent in doc.ents if ent.label_ in ("GPE", "LOC", "FAC")]
-        if geos:
-            chosen = None
-            if trigger_pos is not None:
-                # prefer the first geo entity that starts at/after the trigger
-                after = [e for e in geos if e.start_char >= trigger_pos]
-                chosen = after[0] if after else geos[0]
-            else:
-                chosen = geos[0]
-            loc = _clean_location(chosen.text)
-            if loc:
-                # spaCy-confirmed location: high confidence, higher if a trigger
-                # phrase also pointed here.
-                conf = 0.9 if trigger_loc else 0.7
-                return loc, conf
-
-    if trigger_loc:
-        # regex-only hit (no spaCy or spaCy found nothing): medium confidence
-        return trigger_loc, 0.6
+        for e in doc.ents:
+            if e.label_ in ("GPE", "LOC", "FAC"):
+                loc = _clean_location(e.text)
+                if loc:
+                    return loc, 0.5
 
     return None, 0.0
 

@@ -47,7 +47,7 @@ def process_posts(posts):
     Returns a summary dict: {scanned, matched, updated, skipped}.
     """
     active_cases = MissingPerson.query.filter_by(status='active').all()
-    summary = {"scanned": 0, "matched": 0, "updated": 0, "skipped": 0}
+    summary = {"scanned": 0, "matched": 0, "updated": 0, "skipped": 0, "results": []}
 
     for post in posts:
         summary["scanned"] += 1
@@ -75,6 +75,15 @@ def process_posts(posts):
             case.last_location_source = 'facebook'
             applied = True
             summary["updated"] += 1
+
+        # Per-post detail so the UI can show exactly what was extracted.
+        summary["results"].append({
+            "person_name": case.name,
+            "match_score": round(score, 1),
+            "previous_location": previous_location,
+            "new_location": location,
+            "applied": applied,
+        })
 
         sighting = FacebookSighting(
             missing_person_id=case.id,
