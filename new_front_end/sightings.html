@@ -65,11 +65,7 @@
 
           <!-- SECONDARY: automated sources (best-effort) -->
           <div class="fb-auto p-3 mb-3">
-            <div class="small text-muted-light mb-2"><strong class="text-light">Automated sources</strong> <span class="badge bg-secondary">experimental</span></div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-              <button id="live-scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Scan group now</span></button>
-              <span class="text-muted-light small">Pulls recent posts from your Facebook group (needs <code>FB_GROUP</code> + <code>FB_COOKIES</code>). Facebook frequently blocks scraping, so this may return nothing.</span>
-            </div>
+            <div class="small text-muted-light mb-2"><strong class="text-light">Automated scanning</strong> — searches a live source and runs matches through the same pipeline.</div>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
               <input id="reddit-query" type="text" class="form-control form-control-sm" style="max-width:220px" placeholder="Reddit search, e.g. a case name">
               <input id="reddit-sub" type="text" class="form-control form-control-sm" style="max-width:150px" placeholder="subreddit (optional)">
@@ -320,26 +316,6 @@
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         } finally {
           btn.disabled = false; btn.innerHTML = "<span>Run Demo Scan</span>";
-        }
-      });
-
-      document.getElementById("live-scan-btn").addEventListener("click", async function () {
-        var btn = this, res = document.getElementById("scan-result");
-        btn.disabled = true; btn.innerHTML = "<span>Scanning group…</span>";
-        res.innerHTML = '<div class="alert alert-info">Pulling posts from Facebook — this can take up to a minute…</div>';
-        try {
-          // Empty body -> not demo, no supplied posts -> live scrape of the configured group.
-          var s = await LOCAITE.apiPost("/api/admin/fb/scan", {});
-          if (s.scanned === 0) {
-            res.innerHTML = '<div class="alert alert-warning">The scan returned <strong>0 posts</strong>. Facebook may have blocked the request, the cookies may be expired, or the group id is wrong. Check <code>FB_GROUP</code> / <code>FB_COOKIES</code> and try again.</div>';
-          } else {
-            showSummary(res, s);
-          }
-          load();
-        } catch (err) {
-          res.innerHTML = '<div class="alert alert-danger">Live scan failed: ' + err.message + "</div>";
-        } finally {
-          btn.disabled = false; btn.innerHTML = "<span>Scan group now</span>";
         }
       });
 
