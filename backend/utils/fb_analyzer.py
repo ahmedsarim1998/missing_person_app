@@ -186,24 +186,65 @@ def extract_location(text):
 # ---------------------------------------------------------------------------
 # Facebook ingestion (the ONLY FB-specific code) -- stubbed by default
 # ---------------------------------------------------------------------------
+# Hard cap on posts pulled per scan, so a live run can't loop indefinitely
+# (each post is a network round-trip and Facebook throttles aggressively).
+_MAX_POSTS_PER_SCAN = 60
+
+
 def fetch_posts(group, pages=2, cookies=None, _sample=None):
     """Yield dicts: {"post_id", "text", "post_url"}.
 
-    By default this is a stub that yields nothing (or `_sample` if provided),
-    so the rest of the pipeline is fully testable offline. Swap the body for
-    facebook_scraper.get_posts(...) when you're ready to go live:
+    Live mode uses `facebook-scraper` to pull recent posts from a Facebook group.
+    Group posts require an authenticated session, so `cookies` must be the path
+    to a Netscape-format cookies.txt exported from a logged-in browser (on the
+    deployed app, put it on the persistent volume, e.g. /data/cookies.txt, and
+    set FB_COOKIES to that path).
 
-        from facebook_scraper import get_posts
-        for post in get_posts(group, pages=pages, cookies=cookies,
-                              options={"comments": False}):
-            yield {
-                "post_id": str(post.get("post_id")),
-                "text": post.get("text") or "",
-                "post_url": post.get("post_url"),
-            }
+    Passing `_sample` bypasses Facebook entirely and yields the given posts —
+    used by the offline unit tests so the rest of the pipeline stays testable
+    with zero external dependencies.
     """
     if _sample is not None:
         for p in _sample:
             yield p
-    # else: stub -> nothing. Live implementation goes here (see docstring).
-    return
+        return
+
+    if not group:
+        raise RuntimeError(
+            "FB_GROUP is not configured. Set it to your Facebook group id "
+            "(or name) in the environment before running a live scan."
+        )
+
+    try:
+        from facebook_scraper import get_posts
+    except ImportError as exc:  # optional dep, not in every environment
+        raise RuntimeError(
+            "facebook-scraper is not installed in this environment, so live "
+            "group scanning is unavailable. Add it to requirements and redeploy."
+        ) from exc
+
+    # Resolve the cookies file. Groups are private-ish; without a valid session
+    # Facebook returns nothing (or blocks), so a real, existing file is required.
+    cookies_arg = None
+    if cookies:
+        import os
+        if os.path.isfile(cookies):
+            cookies_arg = cookies
+        else:
+            raise RuntimeError(
+                "FB_COOKIES is set to '%s' but no such file exists. Point it at "
+                "a Netscape-format cookies.txt (e.g. /data/cookies.txt)." % cookies
+            )
+
+    count = 0
+    for post in get_posts(group=group, pages=pages, cookies=cookies_arg,
+                          options={"comments": False, "reactors": False}):
+        yield {
+            "post_id": (str(post.get("post_id"))
+                        if post.get("post_id") is not None else None),
+            "text": post.get("text") or "",
+            "post_url": post.get("post_url"),
+        }
+        count += 1
+        if count >= _MAX_POSTS_PER_SCAN:
+            break

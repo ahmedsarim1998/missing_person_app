@@ -30,6 +30,10 @@
               <span class="text-muted-light small">Tip: the post must contain an <strong>active case's name</strong> and a phrase like “last seen in/near &lt;place&gt;”.</span>
             </div>
             <div class="mt-3 pt-2" style="border-top:1px solid rgba(255,255,255,.08)">
+              <button id="live-scan-btn" class="btn-main btn-sm align-middle me-2"><span>Scan group now</span></button>
+              <span class="text-muted-light small">Pulls recent posts from your configured Facebook group (needs <code>FB_GROUP</code> + <code>FB_COOKIES</code>). Can take up to a minute.</span>
+            </div>
+            <div class="mt-3 pt-2" style="border-top:1px solid rgba(255,255,255,.08)">
               <div class="form-check form-switch d-inline-block me-2 text-light align-middle">
                 <input class="form-check-input" type="checkbox" id="demo-toggle">
                 <label class="form-check-label" for="demo-toggle">Demo mode</label>
@@ -123,6 +127,26 @@
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         } finally {
           btn.disabled = false; btn.innerHTML = "<span>Run Demo Scan</span>";
+        }
+      });
+
+      document.getElementById("live-scan-btn").addEventListener("click", async function () {
+        var btn = this, res = document.getElementById("scan-result");
+        btn.disabled = true; btn.innerHTML = "<span>Scanning group…</span>";
+        res.innerHTML = '<div class="alert alert-info">Pulling posts from Facebook — this can take up to a minute…</div>';
+        try {
+          // Empty body -> not demo, no supplied posts -> live scrape of the configured group.
+          var s = await LOCAITE.apiPost("/api/admin/fb/scan", {});
+          if (s.scanned === 0) {
+            res.innerHTML = '<div class="alert alert-warning">The scan returned <strong>0 posts</strong>. Facebook may have blocked the request, the cookies may be expired, or the group id is wrong. Check <code>FB_GROUP</code> / <code>FB_COOKIES</code> and try again.</div>';
+          } else {
+            showSummary(res, s);
+          }
+          load();
+        } catch (err) {
+          res.innerHTML = '<div class="alert alert-danger">Live scan failed: ' + err.message + "</div>";
+        } finally {
+          btn.disabled = false; btn.innerHTML = "<span>Scan group now</span>";
         }
       });
       load();

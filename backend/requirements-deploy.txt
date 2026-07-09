@@ -32,3 +32,9 @@ keras-facenet==0.3.2
 mtcnn==0.1.1
 pillow
 scipy==1.9.3
+
+# --- Social-media analyzer (live Facebook group scanning) ---
+# rapidfuzz has no numpy/TF dependency; facebook-scraper pulls only web-scraping
+# libs (requests/lxml/dateparser), so neither conflicts with the CV stack above.
+rapidfuzz==3.9.7
+facebook-scraper==0.2.59
