@@ -157,9 +157,10 @@ Contact: &lt;optional phone&gt;</pre>
           var active = (cases || []).filter(function (c) { return c.status === "active"; });
           if (active.length) name = active[0].name;
         } catch (e) { /* fall back to the generic name */ }
-        document.getElementById("post-text").value =
-          "Name: " + name + "\nAge: 23\nLast seen: near Saddar, Karachi\nContact: 0300-1234567";
-        document.getElementById("post-text").focus();
+        var ta = document.getElementById("post-text");
+        ta.dataset.ghost = ""; ta.style.color = "";
+        ta.value = "Name: " + name + "\nAge: 23\nLast seen: near Saddar, Karachi\nContact: 0300-1234567";
+        ta.focus();
       });
 
       // Render the rich result of a manual analyze (location + face-check + images).
@@ -174,9 +175,11 @@ Contact: &lt;optional phone&gt;</pre>
       function showAnalyzeResult(res, r) {
         var html = "";
         if (!r.matched) {
-          html += '<div class="alert alert-warning mb-2"><strong>No active case matched the text.</strong> ' +
-            "The post must name an <strong>active case</strong>." +
-            (r.images && r.images.length ? " (Attached image(s) were still face-checked below.)" : "") + "</div>";
+          html += '<div class="alert alert-warning mb-2">' +
+            "<strong>No active case found under this name.</strong> " +
+            "This person isn’t registered yet — please add them first via " +
+            '<a href="report.html" class="alert-link">Report Missing</a> (upload their photos), then analyze the post.' +
+            (r.images && r.images.length ? " Attached image(s) were still face-checked below." : "") + "</div>";
         } else if (!r.new_location) {
           html += '<div class="alert alert-info mb-2">Matched <strong>' + esc(r.person_name) + "</strong> (" +
             esc(r.match_score) + "% name match), but <strong>no location</strong> was found in the text. " +
@@ -204,34 +207,66 @@ Contact: &lt;optional phone&gt;</pre>
         res.innerHTML = html;
       }
 
-      // Live thumbnail preview of the images the admin attaches.
-      document.getElementById("post-images").addEventListener("change", function () {
+      // Attached images are tracked in our own array (a FileList can't be
+      // edited) so the admin can add more or remove a wrong one before analyzing.
+      var selectedImages = [];
+      var imgInput = document.getElementById("post-images");
+      function renderImagePreviews() {
         var host = document.getElementById("img-preview");
         host.innerHTML = "";
-        var files = this.files || [];
-        for (var i = 0; i < files.length; i++) {
+        selectedImages.forEach(function (file, idx) {
+          var wrap = document.createElement("div");
+          wrap.style.cssText = "position:relative;display:inline-block";
           var img = document.createElement("img");
-          img.src = URL.createObjectURL(files[i]);
+          img.src = URL.createObjectURL(file);
           img.style.cssText = "height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.15)";
-          host.appendChild(img);
-        }
+          var x = document.createElement("button");
+          x.type = "button"; x.textContent = "×"; x.title = "Remove this image";
+          x.style.cssText = "position:absolute;top:-8px;right:-8px;width:20px;height:20px;line-height:16px;padding:0;border-radius:50%;border:none;background:#dc3545;color:#fff;font-weight:bold;cursor:pointer";
+          x.addEventListener("click", function () { selectedImages.splice(idx, 1); renderImagePreviews(); });
+          wrap.appendChild(img); wrap.appendChild(x);
+          host.appendChild(wrap);
+        });
+      }
+      imgInput.addEventListener("change", function () {
+        for (var i = 0; i < this.files.length; i++) selectedImages.push(this.files[i]);
+        this.value = "";   // let the same file be re-picked and always fire change
+        renderImagePreviews();
       });
+
+      // In-box sample: show the recommended format as ghost text that clears on
+      // click and comes back if the box is left empty.
+      var ta = document.getElementById("post-text");
+      var SAMPLE = "Name: (active case's full name)\nAge: (optional)\nLast seen: (area, city)\nContact: (optional phone)";
+      function showGhost() { ta.value = SAMPLE; ta.dataset.ghost = "1"; ta.style.color = "#8a97a7"; }
+      function clearGhost() { if (ta.dataset.ghost === "1") { ta.value = ""; ta.dataset.ghost = ""; ta.style.color = ""; } }
+      function ghostText() { return ta.dataset.ghost === "1" ? "" : (ta.value || "").trim(); }
+      ta.addEventListener("focus", clearGhost);
+      ta.addEventListener("blur", function () { if (!(ta.value || "").trim()) showGhost(); });
+      showGhost();
 
       document.getElementById("analyze-btn").addEventListener("click", async function () {
         var btn = this, res = document.getElementById("scan-result");
-        var text = (document.getElementById("post-text").value || "").trim();
-        var files = document.getElementById("post-images").files || [];
-        if (!text && !files.length) {
+        var text = ghostText();
+        if (!text && !selectedImages.length) {
           res.innerHTML = '<div class="alert alert-warning">Paste a post or attach an image first.</div>'; return;
         }
         btn.disabled = true; btn.innerHTML = "<span>Analyzing…</span>";
         try {
           var fd = new FormData();
           fd.append("text", text);
-          for (var i = 0; i < files.length; i++) fd.append("images", files[i]);
+          for (var i = 0; i < selectedImages.length; i++) fd.append("images", selectedImages[i]);
           var r = await LOCAITE.apiPostForm("/api/admin/fb/analyze", fd);
           showAnalyzeResult(res, r);
-          load();
+          if (r.matched) {
+            // Case found & processed -> clear the form for the next post.
+            selectedImages = [];
+            renderImagePreviews();
+            imgInput.value = "";
+            ta.value = ""; showGhost();
+            load();
+          }
+          // If no case matched, keep the text/images so the admin can fix the name.
         } catch (err) {
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
         } finally {
