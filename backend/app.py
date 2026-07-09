@@ -39,12 +39,14 @@ def create_app(config_name=None):
     from routes.admin import admin_bp
     from routes.stream import stream_bp
     from routes.fb import fb_bp
+    from routes.reddit import reddit_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(cases_bp, url_prefix='/api/cases')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(stream_bp, url_prefix='/api/stream')
     app.register_blueprint(fb_bp, url_prefix='/api/admin/fb')
+    app.register_blueprint(reddit_bp, url_prefix='/api/admin/reddit')
 
     @app.route('/api/health')
     def health():
@@ -158,6 +160,8 @@ def _migrate_columns(app):
     additions = [
         "ALTER TABLE facebook_sighting ADD COLUMN image_paths TEXT",
         "ALTER TABLE facebook_sighting ADD COLUMN face_match VARCHAR(200)",
+        "ALTER TABLE missing_person ADD COLUMN reporter VARCHAR(80)",
+        "ALTER TABLE match_alert ADD COLUMN camera_source VARCHAR(200)",
     ]
     for stmt in additions:
         try:

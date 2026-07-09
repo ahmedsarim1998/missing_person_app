@@ -41,3 +41,4 @@ scipy==1.9.3
 rapidfuzz==3.9.7
 facebook-scraper==0.2.59
 lxml_html_clean==0.4.1
+requests>=2.28,<3

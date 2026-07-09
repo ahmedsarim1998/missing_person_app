@@ -24,6 +24,7 @@ class MissingPerson(db.Model):
     photo_path = db.Column(db.String(200), nullable=True) # Path to main display photo
     last_location_updated_at = db.Column(db.DateTime, nullable=True) # When last_location was last changed
     last_location_source = db.Column(db.String(50), nullable=True) # 'manual' or 'facebook'
+    reporter = db.Column(db.String(80), nullable=True) # username who reported the case (owner of its alerts)
 
 class MatchAlert(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -32,6 +33,7 @@ class MatchAlert(db.Model):
     confidence = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default='pending') # pending, confirmed, rejected
     snapshot_path = db.Column(db.String(200), nullable=True)  # cropped live frame for side-by-side review
+    camera_source = db.Column(db.String(200), nullable=True)  # which camera/source detected it (webcam index or RTSP/HTTP URL)
     resolved_by = db.Column(db.String(80), nullable=True)     # admin username who confirmed/rejected
     resolved_at = db.Column(db.DateTime, nullable=True)       # when it was resolved
 

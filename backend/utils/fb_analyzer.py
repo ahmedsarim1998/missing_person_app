@@ -80,6 +80,40 @@ def best_name_match(text, candidates):
 
 
 # ---------------------------------------------------------------------------
+# Name extraction (for auto-creating a case from a post with no existing match)
+# ---------------------------------------------------------------------------
+_NAME_LABEL = re.compile(
+    r"(?:^|\n)\s*(?:name|missing(?:\s+person)?|reported\s+missing|"
+    r"please\s+help\s+find|help\s+find|find)\s*[:\-]\s*"
+    r"([A-Za-z][A-Za-z.''\- ]{1,39})",
+    re.IGNORECASE,
+)
+
+
+def extract_name(text):
+    """Best-effort person name from a labelled post ("Name: John Doe").
+    Returns a cleaned 1–3 word name, or None."""
+    if not text:
+        return None
+    m = _NAME_LABEL.search(text)
+    if not m:
+        return None
+    # Keep leading name words; stop at a connector/location word that often
+    # follows the name on the same line ("Sara Khan near DHA" -> "Sara Khan").
+    stop = {"near", "at", "in", "from", "last", "seen", "age", "missing",
+            "who", "was", "is", "has", "went", "around", "of", "s/o", "d/o"}
+    words = []
+    for w in m.group(1).strip().rstrip(".,").split():
+        if w.lower() in stop:
+            break
+        words.append(w)
+        if len(words) >= 3:
+            break
+    name = " ".join(words)
+    return name if len(name) >= 2 else None
+
+
+# ---------------------------------------------------------------------------
 # Location extraction
 # ---------------------------------------------------------------------------
 # Real missing-person posts come in many shapes: free-form sentences ("...was

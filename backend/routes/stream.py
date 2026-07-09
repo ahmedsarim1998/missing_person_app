@@ -308,6 +308,7 @@ class StreamManager:
             db.session.add(MatchAlert(
                 missing_person_id=person_id, confidence=float(distance),
                 status='pending', snapshot_path=snapshot, timestamp=datetime.utcnow(),
+                camera_source=self.current_source(),
             ))
             db.session.commit()
         audit_logger().info("MATCH_ALERT person_id=%s name=%s dist=%.3f", person_id, name, distance)

@@ -94,7 +94,14 @@
       // Most-recent sighting shown as a prominent alert banner at the top.
       var latest = list[0];
       var banner = "";
-      if (latest.new_location) {
+      if (latest.source === "camera") {
+        banner =
+          '<div class="sighting-alert p-3 mb-3">' +
+          '<div class="fw-bold mb-1">🔔 Spotted on a live camera</div>' +
+          "This person may have been detected on camera <strong>" + esc(latest.camera_source || "live feed") +
+          "</strong> on " + new Date(latest.timestamp).toLocaleString() +
+          ". <strong>Review the snapshot below to confirm it is the right person.</strong></div>";
+      } else if (latest.new_location) {
         banner =
           '<div class="sighting-alert p-3 mb-3">' +
           '<div class="fw-bold mb-1">🔔 New possible sighting</div>' +
@@ -109,6 +116,19 @@
               return '<img class="sighting-img" src="' + esc(u) + '" alt="matched image">';
             }).join("") + "</div>"
           : "";
+        var when = new Date(s.timestamp).toLocaleString();
+
+        if (s.source === "camera") {
+          var conf = (s.confidence != null) ? ' <span class="text-muted-light small">(distance ' + esc(s.confidence) + ")</span>" : "";
+          return (
+            '<div class="sighting-card p-3 mb-2">' +
+            '<div class="d-flex flex-wrap align-items-center">' +
+            '<span><span class="badge bg-info me-2">📷 Camera</span>Detected on <strong>' + esc(s.camera_source || "live feed") + "</strong>" + conf + "</span>" +
+            '<span class="text-muted-light small ms-auto">' + when + "</span>" +
+            "</div>" + imgs + "</div>"
+          );
+        }
+
         var faceOk = s.face_match && /^Face match/i.test(s.face_match);
         var face = s.face_match
           ? '<span class="badge ' + (faceOk ? "bg-success" : "bg-secondary") + ' ms-2">' + esc(s.face_match) + "</span>"
@@ -120,8 +140,8 @@
         return (
           '<div class="sighting-card p-3 mb-2">' +
           '<div class="d-flex flex-wrap align-items-center">' +
-          "<span>" + loc + "</span>" + face +
-          '<span class="text-muted-light small ms-auto">' + new Date(s.timestamp).toLocaleString() + post + "</span>" +
+          '<span><span class="badge bg-secondary me-2">🌐 Social</span>' + loc + "</span>" + face +
+          '<span class="text-muted-light small ms-auto">' + when + post + "</span>" +
           "</div>" + imgs +
           (s.new_location ? '<div class="text-muted-light small mt-2">Previous location: ' + esc(s.previous_location || "—") + " → now " + esc(s.new_location) + "</div>" : "") +
           "</div>"

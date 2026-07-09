@@ -49,6 +49,13 @@
             <input id="post-images" type="file" class="form-control mb-2" accept="image/png,image/jpeg,image/webp" multiple>
             <div id="img-preview" class="d-flex flex-wrap gap-2 mb-3"></div>
 
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="create-toggle">
+              <label class="form-check-label small text-muted-light" for="create-toggle">
+                If no active case matches, <strong>open a new case</strong> from this post (uses the post's <em>Name:</em> line and the attached photo).
+              </label>
+            </div>
+
             <div class="d-flex flex-wrap align-items-center gap-2">
               <button id="analyze-btn" class="btn-main"><span>Analyze Post</span></button>
               <button id="sample-btn" type="button" class="btn-main btn-line btn-sm align-middle"><span>Fill sample</span></button>
@@ -62,6 +69,12 @@
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
               <button id="live-scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Scan group now</span></button>
               <span class="text-muted-light small">Pulls recent posts from your Facebook group (needs <code>FB_GROUP</code> + <code>FB_COOKIES</code>). Facebook frequently blocks scraping, so this may return nothing.</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <input id="reddit-query" type="text" class="form-control form-control-sm" style="max-width:220px" placeholder="Reddit search, e.g. a case name">
+              <input id="reddit-sub" type="text" class="form-control form-control-sm" style="max-width:150px" placeholder="subreddit (optional)">
+              <button id="reddit-scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Scan Reddit</span></button>
+              <span class="text-muted-light small">Searches Reddit's official API (needs <code>REDDIT_CLIENT_ID</code> + <code>REDDIT_CLIENT_SECRET</code>) and runs matches through the same pipeline.</span>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
               <div class="form-check form-switch d-inline-block me-1 text-light align-middle">
@@ -187,11 +200,19 @@
       }
       function showAnalyzeResult(res, r) {
         var html = "";
-        if (!r.matched) {
+        if (!r.matched && r.created_case && r.created_case.created) {
+          var cc = r.created_case;
+          html += '<div class="alert alert-success mb-2">' +
+            '<div class="fw-bold mb-1">✓ New case opened for ' + esc(cc.name) + "</div>" +
+            "No existing case matched, so a new missing-person case was created from this post" +
+            (cc.location ? " with last-seen location <strong>" + esc(cc.location) + "</strong>" : "") + ". " +
+            '<a href="case.html?id=' + esc(cc.id) + '" class="alert-link">Open the new case</a>.</div>';
+        } else if (!r.matched) {
+          var reason = (r.created_case && r.created_case.reason)
+            ? " " + esc(r.created_case.reason)
+            : " This person isn’t registered yet — add them first via <a href=\"report.html\" class=\"alert-link\">Report Missing</a>, or tick “open a new case” and attach a photo.";
           html += '<div class="alert alert-warning mb-2">' +
-            "<strong>No active case found under this name.</strong> " +
-            "This person isn’t registered yet — please add them first via " +
-            '<a href="report.html" class="alert-link">Report Missing</a> (upload their photos), then analyze the post.' +
+            "<strong>No active case matched this post.</strong>" + reason +
             (r.images && r.images.length ? " Attached image(s) were still face-checked below." : "") + "</div>";
         } else if (!r.new_location) {
           html += '<div class="alert alert-info mb-2">Matched <strong>' + esc(r.person_name) + "</strong> (" +
@@ -268,10 +289,11 @@
         try {
           var fd = new FormData();
           fd.append("text", text);
+          fd.append("create_if_missing", document.getElementById("create-toggle").checked ? "1" : "0");
           for (var i = 0; i < selectedImages.length; i++) fd.append("images", selectedImages[i]);
           var r = await LOCAITE.apiPostForm("/api/admin/fb/analyze", fd);
           showAnalyzeResult(res, r);
-          if (r.matched) {
+          if (r.matched || (r.created_case && r.created_case.created)) {
             // Case found & processed -> clear the form for the next post.
             selectedImages = [];
             renderImagePreviews();
@@ -320,6 +342,31 @@
           btn.disabled = false; btn.innerHTML = "<span>Scan group now</span>";
         }
       });
+
+      document.getElementById("reddit-scan-btn").addEventListener("click", async function () {
+        var btn = this, res = document.getElementById("scan-result");
+        var query = (document.getElementById("reddit-query").value || "").trim();
+        var sub = (document.getElementById("reddit-sub").value || "").trim();
+        if (!query) { res.innerHTML = '<div class="alert alert-warning">Enter a Reddit search query first (e.g. a case name).</div>'; return; }
+        btn.disabled = true; btn.innerHTML = "<span>Searching Reddit…</span>";
+        res.innerHTML = '<div class="alert alert-info">Searching Reddit for “' + esc(query) + '”…</div>';
+        try {
+          var s = await LOCAITE.apiPost("/api/admin/reddit/scan", { query: query, subreddit: sub, limit: 25 });
+          if (s.scanned === 0) {
+            res.innerHTML = '<div class="alert alert-warning">Reddit returned <strong>0 posts</strong> for that query. Try a broader search or a specific subreddit.</div>';
+          } else if (s.matched === 0) {
+            res.innerHTML = '<div class="alert alert-info">Scanned <strong>' + s.scanned + '</strong> Reddit post(s), but none matched an active case name. (Reddit scraping works — there was just no match.)</div>';
+          } else {
+            showSummary(res, s);
+          }
+          load();
+        } catch (err) {
+          res.innerHTML = '<div class="alert alert-danger">Reddit scan failed: ' + err.message + "</div>";
+        } finally {
+          btn.disabled = false; btn.innerHTML = "<span>Scan Reddit</span>";
+        }
+      });
+
       load();
     }
   </script>

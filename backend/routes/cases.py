@@ -1,7 +1,8 @@
 import re
+from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from extensions import db
-from models import MissingPerson, FacebookSighting
+from models import MissingPerson, FacebookSighting, MatchAlert
 from werkzeug.utils import secure_filename
 import os
 import cv2
@@ -33,6 +34,51 @@ def get_cases():
         })
     return jsonify(result), 200
 
+MIN_PHOTOS = 1
+MAX_PHOTOS = 10
+
+
+def process_case_photos(files, name):
+    """Save 1–10 photos for `name`, computing a face embedding for each.
+
+    Returns (main_photo_url, embeddings, error_message). On any validation
+    problem error_message is set and the first two are None.
+    """
+    valid = [f for f in files if f and f.filename]
+    if len(valid) < MIN_PHOTOS:
+        return None, None, f"Please upload at least {MIN_PHOTOS} photo."
+    if len(valid) > MAX_PHOTOS:
+        return None, None, f"Please upload at most {MAX_PHOTOS} photos (you sent {len(valid)})."
+
+    person_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], secure_filename(name))
+    os.makedirs(person_dir, exist_ok=True)
+
+    model = FaceModel.get_instance()
+    embeddings, main_photo = [], None
+    for file in valid:
+        if not _allowed(file.filename):
+            return None, None, f"Unsupported file type: {file.filename}"
+        filename = secure_filename(file.filename)
+        path = os.path.join(person_dir, filename)
+        file.save(path)
+        url = f"/static/uploads/{secure_filename(name)}/{filename}"
+        if main_photo is None:
+            main_photo = url   # first valid photo is the display photo
+
+        img = cv2.imread(path)
+        if img is None:
+            continue
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        detections = model.detect_faces(rgb)
+        if detections:
+            best = max(detections, key=lambda d: d['box'][2] * d['box'][3])
+            embeddings.append(model.get_embedding(model.extract_face(rgb, best['box'])))
+
+    if not embeddings:
+        return None, None, "No faces detected in the uploaded photos. Use clear, front-facing photos."
+    return main_photo, embeddings, None
+
+
 @cases_bp.route('/', methods=['POST'])
 @login_required
 def create_case():
@@ -52,54 +98,20 @@ def create_case():
     if national_id and not re.match(r'^\d{5}-\d{7}-\d{1}$', national_id):
         return jsonify({"msg": "Invalid National ID format. Use XXXXX-XXXXXXX-X"}), 400
 
-    # Save photos
-    person_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], secure_filename(name))
-    os.makedirs(person_dir, exist_ok=True)
+    main_photo, saved_embeddings, err = process_case_photos(files, name)
+    if err:
+        return jsonify({"msg": err}), 400
 
-    saved_embeddings = []
-    main_photo = None
-
-    model = FaceModel.get_instance()
-
-    for i, file in enumerate(files):
-        if not file or file.filename == '':
-            continue
-        if not _allowed(file.filename):
-            return jsonify({"msg": f"Unsupported file type: {file.filename}"}), 400
-        filename = secure_filename(file.filename)
-        path = os.path.join(person_dir, filename)
-        file.save(path)
-
-        if i == 0:
-            main_photo = f"/static/uploads/{secure_filename(name)}/{filename}"
-
-        # Process embedding
-        img = cv2.imread(path)
-        if img is None:
-            continue
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        detections = model.detect_faces(rgb)
-        if detections:
-            best = max(detections, key=lambda d: d['box'][2] * d['box'][3])
-            face = model.extract_face(rgb, best['box'])
-            emb = model.get_embedding(face)
-            saved_embeddings.append(emb)
-
-    if not saved_embeddings:
-        return jsonify({"msg": "No faces detected in uploaded photos"}), 400
-
-    # Average embedding or save list? 
-    # For MVP, let's save the list.
     new_case = MissingPerson(
         name=name,
         national_id=national_id,
         last_location=last_location,
         identifiers=identifiers,
         photo_path=main_photo,
-        embedding_blob=saved_embeddings
+        embedding_blob=saved_embeddings,
+        reporter=get_jwt_identity(),
     )
-    
+
     db.session.add(new_case)
     db.session.commit()
     audit_logger().info("CASE_CREATE id=%s name=%s by=%s", new_case.id, name, get_jwt_identity())
@@ -146,17 +158,20 @@ def case_sightings(case_id):
     produced a face-recognition result — newest first.
     """
     MissingPerson.query.get_or_404(case_id)
+    result = []
+
+    # Social-media sightings (post analysis).
     rows = (FacebookSighting.query
             .filter_by(missing_person_id=case_id)
             .order_by(FacebookSighting.created_at.desc())
             .limit(20).all())
-    result = []
     for s in rows:
         images = s.image_paths.split(",") if s.image_paths else []
         if not s.new_location and not images:
             continue  # skip empty/noise entries
         result.append({
-            "id": s.id,
+            "id": "social-%d" % s.id,
+            "source": "social",
             "new_location": s.new_location,
             "previous_location": s.previous_location,
             "applied": s.applied,
@@ -164,8 +179,34 @@ def case_sightings(case_id):
             "images": images,
             "face_match": s.face_match,
             "post_url": s.post_url,
+            "camera_source": None,
+            "confidence": None,
             "timestamp": s.created_at,
         })
+
+    # Live-camera detections (surveillance stream) also alert the case page.
+    alerts = (MatchAlert.query
+              .filter_by(missing_person_id=case_id)
+              .order_by(MatchAlert.timestamp.desc())
+              .limit(20).all())
+    for a in alerts:
+        result.append({
+            "id": "camera-%d" % a.id,
+            "source": "camera",
+            "new_location": None,
+            "previous_location": None,
+            "applied": False,
+            "match_score": None,
+            "images": [a.snapshot_path] if a.snapshot_path else [],
+            "face_match": "Seen on camera",
+            "post_url": None,
+            "camera_source": a.camera_source,
+            "confidence": round(a.confidence, 3) if a.confidence is not None else None,
+            "status": a.status,
+            "timestamp": a.timestamp,
+        })
+
+    result.sort(key=lambda r: r["timestamp"] or datetime.min, reverse=True)
     return jsonify(result), 200
 
 

@@ -44,6 +44,7 @@ def analyze():
     """
     text = request.form.get('text', '')
     images = request.files.getlist('images')
+    create_if_missing = str(request.form.get('create_if_missing', '')).lower() in ('1', 'true', 'on', 'yes')
     if not (text or '').strip() and not images:
         return jsonify({"msg": "Paste a post or attach at least one image"}), 400
     try:
@@ -51,12 +52,15 @@ def analyze():
             text, images,
             current_app.config['UPLOAD_FOLDER'],
             current_app.config['MATCH_THRESHOLD'],
+            create_if_missing=create_if_missing,
+            reporter=get_jwt_identity(),
         )
     except Exception as e:
         current_app.logger.exception("Manual analyze failed")
         return jsonify({"msg": "Analyze failed", "error": str(e)}), 500
-    audit_logger().info("FB_ANALYZE by=%s matched=%s faces=%s",
+    audit_logger().info("FB_ANALYZE by=%s matched=%s created=%s faces=%s",
                         get_jwt_identity(), result.get('person_name'),
+                        bool((result.get('created_case') or {}).get('created')),
                         len(result.get('face_results') or []))
     return jsonify(result), 200
 

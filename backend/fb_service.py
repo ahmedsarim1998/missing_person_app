@@ -139,6 +139,22 @@ def _save_sighting_images(files, upload_folder):
     return out
 
 
+def _embedding_from_bgr(bgr_image):
+    """Best face embedding from a BGR image, or None if no face is found."""
+    import cv2
+    from utils.face_recognition import FaceModel
+    model = FaceModel.get_instance()
+    rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+    dets = model.detect_faces(rgb)
+    if not dets:
+        return None
+    best = max(dets, key=lambda d: d["box"][2] * d["box"][3])
+    face = model.extract_face(rgb, best["box"])
+    if face.size == 0:
+        return None
+    return model.get_embedding(face)
+
+
 def _match_faces_in_image(bgr_image, active_cases, threshold):
     """Detect faces in a BGR image and match each against active-case embeddings.
 
@@ -185,7 +201,46 @@ def _summarize_faces(face_results):
     return "No face match among active cases"
 
 
-def analyze_manual_post(text, image_files, upload_folder, match_threshold):
+def _create_case_from_post(text, location, saved_images, reporter):
+    """Open a new active case from a post that matched no existing case.
+
+    Needs a readable name and at least one detectable face. Returns a summary
+    dict (with a 'reason' explaining any failure so the UI can guide the admin).
+    """
+    name = fa.extract_name(text)
+    if not name:
+        return {"created": False, "reason": "Couldn't read a name — add a 'Name: ...' line to open a case."}
+    if not saved_images:
+        return {"created": False, "reason": "Attach at least one clear photo to open a new case."}
+
+    embeddings = []
+    for _url, bgr in saved_images:
+        try:
+            emb = _embedding_from_bgr(bgr)
+        except Exception:
+            emb = None
+        if emb is not None:
+            embeddings.append(emb)
+    if not embeddings:
+        return {"created": False, "reason": "No face detected in the attached photo(s)."}
+
+    new = MissingPerson(
+        name=name,
+        last_location=location,
+        status="active",
+        photo_path=saved_images[0][0],
+        embedding_blob=embeddings,
+        last_location_updated_at=datetime.utcnow() if location else None,
+        last_location_source="facebook" if location else None,
+        reporter=reporter,
+    )
+    db.session.add(new)
+    db.session.commit()
+    return {"created": True, "id": new.id, "name": name, "location": location}
+
+
+def analyze_manual_post(text, image_files, upload_folder, match_threshold,
+                        create_if_missing=False, reporter=None):
     """Analyze one manually-pasted post plus optional attached images.
 
     Runs the same name-match + location-extraction as the scanner, saves any
@@ -193,6 +248,10 @@ def analyze_manual_post(text, image_files, upload_folder, match_threshold):
     them against active cases, records a FacebookSighting, and returns a rich
     result dict for the UI. Face matching degrades gracefully: if the model or
     embeddings are unavailable, the text + image attachment still succeed.
+
+    If `create_if_missing` and no active case matches, a new case is created
+    from the post's name + attached face photo(s) (this is the "someone reported
+    a person who isn't on the site yet -> open a case for them" flow).
     """
     text = (text or "").strip()
     active_cases = MissingPerson.query.filter_by(status="active").all()
@@ -224,10 +283,13 @@ def analyze_manual_post(text, image_files, upload_folder, match_threshold):
         "images": image_urls,
         "face_results": face_results,
         "face_summary": _summarize_faces(face_results),
+        "created_case": None,
     }
 
     if not matched:
-        # Nothing to update, but still surface any face-match findings.
+        # No existing case. Optionally open a new one from the post.
+        if create_if_missing:
+            result["created_case"] = _create_case_from_post(text, location, saved, reporter)
         return result
 
     previous_location = case.last_location

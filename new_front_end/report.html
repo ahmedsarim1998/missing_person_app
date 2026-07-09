@@ -44,8 +44,9 @@
                     <textarea name="identifiers" rows="3" class="form-control" placeholder="Height, clothing, marks, etc."></textarea>
                   </div>
                   <div class="mb-3">
-                    <label class="form-label">Photos * (first photo becomes the main display photo)</label>
-                    <input type="file" name="photos" class="form-control" accept="image/*" multiple required>
+                    <label class="form-label">Photos * <span class="text-muted-light">(1–10 clear face photos; the first becomes the main display photo)</span></label>
+                    <input type="file" name="photos" class="form-control" accept="image/png,image/jpeg,image/webp" multiple required>
+                    <div id="photo-count" class="form-text text-muted-light small"></div>
                   </div>
                   <button type="submit" class="btn-main" id="submit-btn"><span>Submit Report</span></button>
                 </form>
@@ -63,12 +64,24 @@
   <script src="js/designesia.js"></script>
   <script>
     if (LOCAITE.requireRole()) {
+      var photosInput = document.querySelector("input[name=photos]");
+      var photoCount = document.getElementById("photo-count");
+      photosInput.addEventListener("change", function () {
+        var n = this.files.length;
+        if (n === 0) { photoCount.textContent = ""; photoCount.className = "form-text text-muted-light small"; return; }
+        if (n > 10) { photoCount.textContent = n + " selected — please choose 10 or fewer."; photoCount.className = "form-text text-danger small"; }
+        else { photoCount.textContent = n + " photo(s) selected."; photoCount.className = "form-text text-success small"; }
+      });
+
       document.getElementById("report-form").addEventListener("submit", async function (e) {
         e.preventDefault();
         var msg = document.getElementById("msg");
         var btn = document.getElementById("submit-btn");
         msg.innerHTML = "";
         var f = e.target;
+        var n = f.photos.files.length;
+        if (n < 1) { msg.innerHTML = '<div class="alert alert-danger">Please upload at least 1 photo.</div>'; return; }
+        if (n > 10) { msg.innerHTML = '<div class="alert alert-danger">Please upload at most 10 photos (you selected ' + n + ').</div>'; return; }
         var fd = new FormData();
         fd.append("name", f.name.value.trim());
         fd.append("national_id", f.national_id.value.trim());
