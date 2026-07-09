@@ -55,6 +55,7 @@ def create_app(config_name=None):
 
     with app.app_context():
         db.create_all()
+        _migrate_columns(app)
         _seed_admin(app)
 
     app.logger.info("locAIte app created (env=%s, debug=%s)",
@@ -143,6 +144,27 @@ def _register_frontend(app):
         if os.path.isfile(full + '.html'):
             return send_from_directory(FRONTEND_DIR, filename + '.html')
         abort(404)
+
+
+def _migrate_columns(app):
+    """Add columns introduced after the DB was first created.
+
+    SQLAlchemy's create_all() only creates missing *tables*, never alters an
+    existing one — so on a persistent volume with an older schema, new columns
+    must be added explicitly. Each ADD COLUMN is idempotent (ignored if the
+    column already exists), so this is safe to run on every boot.
+    """
+    from sqlalchemy import text as _sql
+    additions = [
+        "ALTER TABLE facebook_sighting ADD COLUMN image_paths TEXT",
+        "ALTER TABLE facebook_sighting ADD COLUMN face_match VARCHAR(200)",
+    ]
+    for stmt in additions:
+        try:
+            db.session.execute(_sql(stmt))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()  # column already exists -> fine
 
 
 def _seed_admin(app):

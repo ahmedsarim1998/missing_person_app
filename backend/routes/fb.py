@@ -33,6 +33,34 @@ def scan():
     return jsonify(summary), 200
 
 
+@fb_bp.route('/analyze', methods=['POST'])
+@admin_required
+def analyze():
+    """Analyze one manually-pasted post + optional attached images (multipart).
+
+    Form fields: `text` (the post) and `images` (0+ image files). Runs name +
+    location extraction and face recognition on the images, updates the matched
+    case, and returns a rich result for side-by-side display.
+    """
+    text = request.form.get('text', '')
+    images = request.files.getlist('images')
+    if not (text or '').strip() and not images:
+        return jsonify({"msg": "Paste a post or attach at least one image"}), 400
+    try:
+        result = fb_service.analyze_manual_post(
+            text, images,
+            current_app.config['UPLOAD_FOLDER'],
+            current_app.config['MATCH_THRESHOLD'],
+        )
+    except Exception as e:
+        current_app.logger.exception("Manual analyze failed")
+        return jsonify({"msg": "Analyze failed", "error": str(e)}), 500
+    audit_logger().info("FB_ANALYZE by=%s matched=%s faces=%s",
+                        get_jwt_identity(), result.get('person_name'),
+                        len(result.get('face_results') or []))
+    return jsonify(result), 200
+
+
 @fb_bp.route('/sightings', methods=['GET'])
 @admin_required
 def sightings():
@@ -49,6 +77,8 @@ def sightings():
             "new_location": s.new_location,
             "applied": s.applied,
             "post_url": s.post_url,
+            "images": s.image_paths.split(",") if s.image_paths else [],
+            "face_match": s.face_match,
             "timestamp": s.created_at,
         })
     return jsonify(result), 200

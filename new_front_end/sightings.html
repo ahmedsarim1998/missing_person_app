@@ -36,6 +36,12 @@ Contact: &lt;optional phone&gt;</pre>
             </div>
 
             <textarea id="post-text" class="form-control mb-2" rows="5" placeholder="Paste the post text here, or click “Fill sample” to load a working example."></textarea>
+
+            <!-- Optional: attach the post's images -> face-matched against active cases -->
+            <label for="post-images" class="form-label small text-muted-light mb-1">Add images from the post <span class="text-muted-light">(optional — checked against case photos)</span></label>
+            <input id="post-images" type="file" class="form-control mb-1" accept="image/png,image/jpeg,image/webp" multiple>
+            <div id="img-preview" class="d-flex flex-wrap gap-2 mb-2"></div>
+
             <div class="d-flex flex-wrap align-items-center gap-2">
               <button id="analyze-btn" class="btn-main"><span>Analyze Post</span></button>
               <button id="sample-btn" type="button" class="btn-main btn-sm align-middle"><span>Fill sample</span></button>
@@ -72,13 +78,25 @@ Contact: &lt;optional phone&gt;</pre>
           ? '<span class="badge bg-success">Applied</span>'
           : '<span class="badge bg-secondary">Logged</span>';
         var link = s.post_url ? '<a href="' + s.post_url + '" target="_blank" rel="noopener">view post</a>' : "—";
+        var imgs = (s.images && s.images.length)
+          ? s.images.map(function (u) {
+              return '<img src="' + esc(u) + '" alt="" style="height:44px;width:44px;object-fit:cover;border-radius:4px;border:1px solid rgba(255,255,255,.15);margin-right:3px">';
+            }).join("")
+          : "—";
+        var face = s.face_match
+          ? (/^Face match/i.test(s.face_match)
+              ? '<span class="badge bg-success">' + esc(s.face_match) + "</span>"
+              : '<span class="badge bg-secondary">' + esc(s.face_match) + "</span>")
+          : "—";
         return (
           "<tr>" +
-          "<td>" + s.person_name + "</td>" +
-          "<td>" + (s.match_score != null ? s.match_score : "—") + "</td>" +
-          "<td>" + (s.previous_location || "—") + "</td>" +
-          "<td>" + (s.new_location || "—") + "</td>" +
+          "<td>" + esc(s.person_name) + "</td>" +
+          "<td>" + (s.match_score != null ? esc(s.match_score) : "—") + "</td>" +
+          "<td>" + esc(s.previous_location || "—") + "</td>" +
+          "<td>" + esc(s.new_location || "—") + "</td>" +
           "<td>" + applied + "</td>" +
+          "<td>" + imgs + "</td>" +
+          "<td>" + face + "</td>" +
           "<td>" + new Date(s.timestamp).toLocaleString() + "</td>" +
           "<td>" + link + "</td>" +
           "</tr>"
@@ -91,7 +109,7 @@ Contact: &lt;optional phone&gt;</pre>
           if (!list.length) { host.innerHTML = '<p class="text-muted-light">No sightings recorded yet. Run a scan to populate.</p>'; return; }
           host.innerHTML =
             '<table class="table table-dark table-striped"><thead><tr>' +
-            "<th>Person</th><th>Score</th><th>Previous</th><th>New Location</th><th>Status</th><th>Time</th><th>Post</th>" +
+            "<th>Person</th><th>Score</th><th>Previous</th><th>New Location</th><th>Status</th><th>Images</th><th>Face</th><th>Time</th><th>Post</th>" +
             "</tr></thead><tbody>" + list.map(row).join("") + "</tbody></table>";
         } catch (err) {
           host.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";
@@ -144,16 +162,75 @@ Contact: &lt;optional phone&gt;</pre>
         document.getElementById("post-text").focus();
       });
 
+      // Render the rich result of a manual analyze (location + face-check + images).
+      function thumb(url) {
+        return '<img src="' + esc(url) + '" alt="post image" style="height:88px;width:88px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.15)">';
+      }
+      function faceBadge(f) {
+        return f.matched
+          ? '<span class="badge bg-success">✓ Face matches ' + esc(f.name) + " (dist " + esc(f.distance) + ")</span>"
+          : '<span class="badge bg-secondary">Face — no match (closest: ' + esc(f.name) + ", dist " + esc(f.distance) + ")</span>";
+      }
+      function showAnalyzeResult(res, r) {
+        var html = "";
+        if (!r.matched) {
+          html += '<div class="alert alert-warning mb-2"><strong>No active case matched the text.</strong> ' +
+            "The post must name an <strong>active case</strong>." +
+            (r.images && r.images.length ? " (Attached image(s) were still face-checked below.)" : "") + "</div>";
+        } else if (!r.new_location) {
+          html += '<div class="alert alert-info mb-2">Matched <strong>' + esc(r.person_name) + "</strong> (" +
+            esc(r.match_score) + "% name match), but <strong>no location</strong> was found in the text. " +
+            "Add a line like “Last seen: &lt;place&gt;”.</div>";
+        } else {
+          html += '<div class="alert alert-success mb-2">' +
+            '<div class="fw-bold mb-2">✓ Location updated for ' + esc(r.person_name) + "</div>" +
+            '<div class="d-flex flex-wrap align-items-center gap-2">' +
+            '<span class="badge bg-secondary">' + (r.previous_location ? esc(r.previous_location) : "—") + "</span>" +
+            "<span>&rarr;</span>" +
+            '<span class="badge bg-success fs-6">' + esc(r.new_location) + "</span>" +
+            '<span class="text-muted-light small ms-2">' + esc(r.match_score) + "% name match</span>" +
+            "</div></div>";
+        }
+        if (r.images && r.images.length) {
+          var faces = r.face_results || [];
+          var verdict = faces.length
+            ? faces.map(faceBadge).join(" ")
+            : '<span class="text-muted-light">No face detected in the attached image(s).</span>';
+          html += '<div class="p-2 rounded-1" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)">' +
+            '<div class="small text-muted-light mb-2"><strong>Face check</strong> — attached images vs active-case photos:</div>' +
+            '<div class="d-flex flex-wrap gap-2 mb-2">' + r.images.map(thumb).join("") + "</div>" +
+            '<div class="d-flex flex-wrap gap-2">' + verdict + "</div></div>";
+        }
+        res.innerHTML = html;
+      }
+
+      // Live thumbnail preview of the images the admin attaches.
+      document.getElementById("post-images").addEventListener("change", function () {
+        var host = document.getElementById("img-preview");
+        host.innerHTML = "";
+        var files = this.files || [];
+        for (var i = 0; i < files.length; i++) {
+          var img = document.createElement("img");
+          img.src = URL.createObjectURL(files[i]);
+          img.style.cssText = "height:64px;width:64px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.15)";
+          host.appendChild(img);
+        }
+      });
+
       document.getElementById("analyze-btn").addEventListener("click", async function () {
         var btn = this, res = document.getElementById("scan-result");
         var text = (document.getElementById("post-text").value || "").trim();
-        if (!text) { res.innerHTML = '<div class="alert alert-warning">Paste a post first.</div>'; return; }
+        var files = document.getElementById("post-images").files || [];
+        if (!text && !files.length) {
+          res.innerHTML = '<div class="alert alert-warning">Paste a post or attach an image first.</div>'; return;
+        }
         btn.disabled = true; btn.innerHTML = "<span>Analyzing…</span>";
         try {
-          var s = await LOCAITE.apiPost("/api/admin/fb/scan", {
-            posts: [{ post_id: "manual-" + Date.now(), text: text }],
-          });
-          showSummary(res, s);
+          var fd = new FormData();
+          fd.append("text", text);
+          for (var i = 0; i < files.length; i++) fd.append("images", files[i]);
+          var r = await LOCAITE.apiPostForm("/api/admin/fb/analyze", fd);
+          showAnalyzeResult(res, r);
           load();
         } catch (err) {
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";

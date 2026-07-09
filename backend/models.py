@@ -51,6 +51,8 @@ class FacebookSighting(db.Model):
     previous_location = db.Column(db.String(200), nullable=True) # value before this update
     new_location = db.Column(db.String(200), nullable=True) # extracted last-seen location
     applied = db.Column(db.Boolean, default=False) # whether last_location was actually changed
+    image_paths = db.Column(db.Text, nullable=True) # comma-separated URLs of images attached to the post
+    face_match = db.Column(db.String(200), nullable=True) # face-recognition verdict on the attached images
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     person = db.relationship('MissingPerson', backref='sightings')
