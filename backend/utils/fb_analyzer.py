@@ -92,8 +92,8 @@ def best_name_match(text, candidates):
 # the most specific alternative wins at a given position.
 _PHRASE_TRIGGER = re.compile(
     r"\b(?:"
-    r"last\s*known\s*location|last\s*seen\s*(?:at|near|in|around)?|"
-    r"last\s*location|went\s*missing\s*(?:from|near|at)|"
+    r"last\s*seen\s*location|last\s*known\s*location|last\s*location|"
+    r"last\s*seen\s*(?:at|near|in|around)?|went\s*missing\s*(?:from|near|at)|"
     r"missing\s*(?:from|near|at)|disappeared\s*(?:from|near|at)|"
     r"spotted\s*(?:at|near|in|around)?|seen\s*(?:at|near|in|around)|"
     r"reported\s*(?:from|near|at)"
@@ -163,6 +163,9 @@ def _clean_location(loc):
     if stop:
         loc = loc[:stop.start()]
     loc = _TRAIL_TIME.sub("", loc)   # strip a trailing clock time
+    # Drop a leading field label that slipped through ("location: X" -> "X").
+    loc = re.sub(r"^\s*(?:location|address|area|place)\s*[:\-–—]\s*", "", loc,
+                 flags=re.IGNORECASE)
     # Drop a leading preposition that slipped through ("near X" -> "X").
     loc = re.sub(r"^\s*(?:at|near|in|from|around|close\s+to)\s+", "", loc,
                  flags=re.IGNORECASE)
