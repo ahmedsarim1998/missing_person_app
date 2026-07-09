@@ -14,6 +14,7 @@
     .sighting-alert { background: #fff3cd; color: #5c4600; border-radius: 12px; }
     .sighting-alert strong { color: inherit; }
     .sighting-img { height: 120px; width: 120px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(0,0,0,.15); }
+    #edit-msg .alert-danger { background: #f8d7da; color: #842029; border: 0; }
   </style>
 </head>
 <body>
@@ -51,10 +52,14 @@
       var badge = c.status === "solved"
         ? '<span class="badge bg-success">Solved</span>'
         : '<span class="badge bg-danger">Active</span>';
-      var adminCtrl = LOCAITE.isAdmin()
-        ? '<div class="mt-4"><button id="toggle-status" class="btn-main"><span>Mark as ' +
-          (c.status === "solved" ? "Active" : "Solved") + "</span></button></div>"
-        : "";
+      // An admin, or the user who reported the case, may edit it.
+      var canEdit = LOCAITE.isAdmin() || (c.reporter && LOCAITE.username() === c.reporter);
+      var controls = '<div class="mt-4 d-flex flex-wrap gap-2">';
+      if (canEdit) controls += '<button id="edit-case" class="btn-main btn-line"><span>Edit details</span></button>';
+      if (LOCAITE.isAdmin()) controls += '<button id="toggle-status" class="btn-main"><span>Mark as ' +
+        (c.status === "solved" ? "Active" : "Solved") + "</span></button>";
+      controls += "</div>";
+
       detail.innerHTML =
         '<div class="row g-4">' +
         '<div class="col-lg-5">' +
@@ -62,22 +67,64 @@
         thumbs(c.photos) +
         "</div>" +
         '<div class="col-lg-7">' +
-        '<div class="d-flex align-items-center mb-2"><h2 class="mb-0 me-3">' + (c.name || "Unknown") + "</h2>" + badge + "</div>" +
+        '<div class="d-flex align-items-center mb-2"><h2 class="mb-0 me-3">' + esc(c.name || "Unknown") + "</h2>" + badge + "</div>" +
         '<table class="table table-dark table-borderless"><tbody>' +
-        "<tr><th style='width:200px'>National ID</th><td>" + (c.national_id || "—") + "</td></tr>" +
-        "<tr><th>Last Known Location</th><td>" + (c.last_location || "—") + "</td></tr>" +
-        "<tr><th>Identifiers</th><td>" + (c.identifiers || "—") + "</td></tr>" +
-        "<tr><th>Status</th><td>" + c.status + "</td></tr>" +
-        "</tbody></table>" + adminCtrl +
+        "<tr><th style='width:200px'>National ID</th><td>" + esc(c.national_id || "—") + "</td></tr>" +
+        "<tr><th>Last Known Location</th><td>" + esc(c.last_location || "—") + "</td></tr>" +
+        "<tr><th>Identifiers</th><td>" + esc(c.identifiers || "—") + "</td></tr>" +
+        "<tr><th>Status</th><td>" + esc(c.status) + "</td></tr>" +
+        "</tbody></table>" + controls +
         "</div></div>";
 
-      var btn = document.getElementById("toggle-status");
-      if (btn) btn.addEventListener("click", async function () {
+      var tbtn = document.getElementById("toggle-status");
+      if (tbtn) tbtn.addEventListener("click", async function () {
         var next = c.status === "solved" ? "active" : "solved";
         try {
           await LOCAITE.apiPut("/api/cases/" + c.id + "/status", { status: next });
           load();
         } catch (err) { alert(err.message); }
+      });
+      var ebtn = document.getElementById("edit-case");
+      if (ebtn) ebtn.addEventListener("click", function () { renderEditForm(c); });
+    }
+
+    function renderEditForm(c) {
+      document.getElementById("sightings-panel").innerHTML = "";
+      detail.innerHTML =
+        '<div class="row g-4"><div class="col-lg-8">' +
+        '<h4 class="mb-3">Edit case details</h4>' +
+        '<div id="edit-msg"></div>' +
+        '<div class="mb-3"><label class="form-label">Name</label>' +
+        '<input id="e-name" class="form-control" value="' + esc(c.name || "") + '"></div>' +
+        '<div class="mb-3"><label class="form-label">National ID</label>' +
+        '<input id="e-nid" class="form-control" placeholder="XXXXX-XXXXXXX-X" value="' + esc(c.national_id || "") + '"></div>' +
+        '<div class="mb-3"><label class="form-label">Last Known Location</label>' +
+        '<input id="e-loc" class="form-control" value="' + esc(c.last_location || "") + '"></div>' +
+        '<div class="mb-3"><label class="form-label">Identifiers / Physical Description</label>' +
+        '<textarea id="e-ids" class="form-control" rows="3">' + esc(c.identifiers || "") + "</textarea></div>" +
+        '<div class="d-flex gap-2">' +
+        '<button id="save-case" class="btn-main"><span>Save changes</span></button>' +
+        '<button id="cancel-edit" class="btn-main btn-line"><span>Cancel</span></button>' +
+        "</div></div></div>";
+
+      document.getElementById("cancel-edit").addEventListener("click", function () { load(); });
+      document.getElementById("save-case").addEventListener("click", async function () {
+        var btn = this, msg = document.getElementById("edit-msg");
+        var payload = {
+          name: document.getElementById("e-name").value.trim(),
+          national_id: document.getElementById("e-nid").value.trim(),
+          last_location: document.getElementById("e-loc").value.trim(),
+          identifiers: document.getElementById("e-ids").value.trim(),
+        };
+        if (!payload.name) { msg.innerHTML = '<div class="alert alert-danger">Name cannot be empty.</div>'; return; }
+        btn.disabled = true; btn.innerHTML = "<span>Saving…</span>";
+        try {
+          await LOCAITE.apiPut("/api/cases/" + c.id, payload);
+          load();
+        } catch (err) {
+          msg.innerHTML = '<div class="alert alert-danger">' + esc(err.message) + "</div>";
+          btn.disabled = false; btn.innerHTML = "<span>Save changes</span>";
+        }
       });
     }
 

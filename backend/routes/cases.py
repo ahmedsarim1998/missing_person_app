@@ -8,7 +8,7 @@ import os
 import cv2
 from utils.face_recognition import FaceModel
 from security import login_required, admin_required
-from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import get_jwt_identity, get_jwt
 from logging_config import audit_logger
 
 cases_bp = Blueprint('cases', __name__)
@@ -146,8 +146,40 @@ def get_case(case_id):
         "identifiers": case.identifiers,
         "status": case.status,
         "photo_path": case.photo_path,
-        "photos": additional_photos
+        "photos": additional_photos,
+        "reporter": case.reporter,
     }), 200
+
+
+@cases_bp.route('/<int:case_id>', methods=['PUT'])
+@login_required
+def edit_case(case_id):
+    """Edit a case's details. Allowed for an admin or the case's own reporter."""
+    case = MissingPerson.query.get_or_404(case_id)
+    identity = get_jwt_identity()
+    role = (get_jwt() or {}).get('role')
+    if role != 'admin' and (case.reporter or None) != identity:
+        return jsonify({"msg": "You can only edit a case you reported."}), 403
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({"msg": "Name cannot be empty"}), 400
+        case.name = name
+    if 'national_id' in data:
+        nid = (data.get('national_id') or '').strip()
+        if nid and not re.match(r'^\d{5}-\d{7}-\d{1}$', nid):
+            return jsonify({"msg": "Invalid National ID format. Use XXXXX-XXXXXXX-X"}), 400
+        case.national_id = nid
+    if 'last_location' in data:
+        case.last_location = (data.get('last_location') or '').strip()
+    if 'identifiers' in data:
+        case.identifiers = (data.get('identifiers') or '').strip()
+
+    db.session.commit()
+    audit_logger().info("CASE_EDIT id=%s by=%s", case_id, identity)
+    return jsonify({"msg": "Case updated"}), 200
 
 @cases_bp.route('/<int:case_id>/sightings', methods=['GET'])
 def case_sightings(case_id):
