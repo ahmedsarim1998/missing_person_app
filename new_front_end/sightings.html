@@ -65,10 +65,10 @@
 
           <!-- SECONDARY: Facebook analyzer demo -->
           <div class="fb-auto p-3 mb-3">
-            <div class="small text-muted-light mb-2"><strong class="text-light">Facebook analyzer — demo</strong> — generates sample Facebook-style posts from your active cases and runs them through the same analysis pipeline, so you can watch the automated flow end-to-end.</div>
+            <div class="small text-muted-light mb-2"><strong class="text-light">Facebook analyzer — demo</strong> — simulates a Facebook post about a new missing person and auto-creates their case, showing the "social post → new case" flow end-to-end.</div>
             <div class="d-flex flex-wrap align-items-center gap-2">
               <button id="scan-btn" class="btn-main btn-line btn-sm align-middle"><span>Run Facebook Demo Scan</span></button>
-              <span class="text-muted-light small ms-1">Live Facebook scraping is blocked by Facebook, so paste real posts above; this demo shows the same pipeline on synthetic posts.</span>
+              <span class="text-muted-light small ms-1">Live Facebook scraping is blocked by Facebook, so paste real posts above; this demo shows the pipeline on a synthetic post.</span>
             </div>
           </div>
 
@@ -297,10 +297,16 @@
 
       document.getElementById("scan-btn").addEventListener("click", async function () {
         var btn = this, res = document.getElementById("scan-result");
-        btn.disabled = true; btn.innerHTML = "<span>Scanning…</span>";
+        btn.disabled = true; btn.innerHTML = "<span>Simulating…</span>";
         try {
-          var s = await LOCAITE.apiPost("/api/admin/fb/scan", { demo: true });
-          showSummary(res, s);
+          var r = await LOCAITE.apiPost("/api/admin/fb/demo", {});
+          res.innerHTML =
+            '<div class="alert alert-success">' +
+            '<div class="fw-bold mb-2">✓ New case auto-created from a Facebook post</div>' +
+            '<div class="mb-2 p-2 rounded-1" style="background:rgba(0,0,0,.08)"><em>Demo Facebook post:</em><br>“' + esc(r.post_text) + '”</div>' +
+            "The system detected a missing person not yet in the system and opened a case for <strong>" +
+            esc(r.name) + "</strong> — last seen near <strong>" + esc(r.location) + "</strong>. " +
+            '<a href="case.html?id=' + esc(r.id) + '" class="alert-link">Open the new case</a>.</div>';
           load();
         } catch (err) {
           res.innerHTML = '<div class="alert alert-danger">' + err.message + "</div>";

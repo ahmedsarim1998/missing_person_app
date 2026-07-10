@@ -28,6 +28,47 @@ _ALLOWED_IMG = {"png", "jpg", "jpeg", "webp"}
 _DEMO_LOCATIONS = ["Saddar, Karachi", "Lahore Cantt", "Gulshan-e-Iqbal, Karachi",
                    "Faisalabad", "Islamabad F-10", "Multan"]
 
+# Fictional people used by the "Facebook demo" to auto-create a new case.
+_DEMO_PEOPLE = ["Imran Ali", "Sana Malik", "Bilal Ahmed", "Hina Raza",
+                "Usman Tariq", "Ayesha Khan", "Faisal Iqbal", "Zara Sheikh"]
+
+
+def create_demo_case(upload_folder):
+    """Demo: synthesize a Facebook post about a NEW missing person and open a
+    case for them — shows the 'social post -> auto-created case' flow live."""
+    import random
+    import cv2
+    import numpy as np
+
+    name = random.choice(_DEMO_PEOPLE)
+    existing = {c.name for c in MissingPerson.query.all()}
+    if name in existing:  # keep repeated demo clicks creating distinct cases
+        name = "%s %d" % (name, random.randint(2, 99))
+    location = random.choice(_DEMO_LOCATIONS)
+    post_text = ("URGENT — missing person: %s was last seen near %s. "
+                 "Please contact the family with any information." % (name, location))
+
+    # Placeholder avatar (initials) so the new case card isn't blank.
+    img = np.full((400, 400, 3), (70, 80, 100), np.uint8)
+    initials = "".join(w[0] for w in name.split()[:2] if w).upper()
+    cv2.putText(img, initials, (105, 250), cv2.FONT_HERSHEY_SIMPLEX, 4.0, (235, 235, 235), 8)
+    subdir = secure_filename(name)
+    person_dir = os.path.join(upload_folder, subdir)
+    os.makedirs(person_dir, exist_ok=True)
+    fname = "demo_%d.jpg" % int(time.time() * 1000)
+    cv2.imwrite(os.path.join(person_dir, fname), img)
+    photo = "/static/uploads/%s/%s" % (subdir, fname)
+
+    case = MissingPerson(
+        name=name, last_location=location, status='active', photo_path=photo,
+        last_location_source='facebook', last_location_updated_at=datetime.utcnow(),
+        reporter='demo',
+    )
+    db.session.add(case)
+    db.session.commit()
+    return {"created": True, "id": case.id, "name": name,
+            "location": location, "post_text": post_text}
+
 
 def synthesize_demo_posts():
     """Build one fake post per active case so 'Scan Now' can be watched
