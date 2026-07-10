@@ -68,13 +68,14 @@ def analyze():
 @fb_bp.route('/demo', methods=['POST'])
 @admin_required
 def demo_case():
-    """Demo: simulate a Facebook post about a new person and auto-create a case."""
+    """Demo: process 3 fixed posts — match-or-create each person, log every post."""
     try:
-        result = fb_service.create_demo_case(current_app.config['UPLOAD_FOLDER'])
+        result = fb_service.run_demo(current_app.config['UPLOAD_FOLDER'])
     except Exception as e:
-        current_app.logger.exception("Demo case creation failed")
+        current_app.logger.exception("Demo run failed")
         return jsonify({"msg": "Demo failed", "error": str(e)}), 500
-    audit_logger().info("FB_DEMO_CASE by=%s created=%s", get_jwt_identity(), result.get('name'))
+    audit_logger().info("FB_DEMO by=%s created=%s updated=%s",
+                        get_jwt_identity(), result.get('created'), result.get('updated'))
     return jsonify(result), 200
 
 

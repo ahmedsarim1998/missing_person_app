@@ -28,27 +28,20 @@ _ALLOWED_IMG = {"png", "jpg", "jpeg", "webp"}
 _DEMO_LOCATIONS = ["Saddar, Karachi", "Lahore Cantt", "Gulshan-e-Iqbal, Karachi",
                    "Faisalabad", "Islamabad F-10", "Multan"]
 
-# Fictional people used by the "Facebook demo" to auto-create a new case.
-_DEMO_PEOPLE = ["Imran Ali", "Sana Malik", "Bilal Ahmed", "Hina Raza",
-                "Usman Tariq", "Ayesha Khan", "Faisal Iqbal", "Zara Sheikh"]
+# The Facebook demo always processes these 3 fixed posts. On each run, for each
+# person: if their case already exists -> update its last-seen location; else ->
+# open a new case. Every post is recorded in the sightings log (the grey table).
+_DEMO_POSTS = [
+    ("Ahmed Sarim", "Gulshan Block 9"),
+    ("Mahad Khan", "North Nazimabad Block N"),
+    ("Mohad Karim", "DHA Phase 6"),
+]
 
 
-def create_demo_case(upload_folder):
-    """Demo: synthesize a Facebook post about a NEW missing person and open a
-    case for them — shows the 'social post -> auto-created case' flow live."""
-    import random
+def _demo_avatar(name, upload_folder):
+    """Save a simple initials placeholder photo for a demo-created case."""
     import cv2
     import numpy as np
-
-    name = random.choice(_DEMO_PEOPLE)
-    existing = {c.name for c in MissingPerson.query.all()}
-    if name in existing:  # keep repeated demo clicks creating distinct cases
-        name = "%s %d" % (name, random.randint(2, 99))
-    location = random.choice(_DEMO_LOCATIONS)
-    post_text = ("URGENT — missing person: %s was last seen near %s. "
-                 "Please contact the family with any information." % (name, location))
-
-    # Placeholder avatar (initials) so the new case card isn't blank.
     img = np.full((400, 400, 3), (70, 80, 100), np.uint8)
     initials = "".join(w[0] for w in name.split()[:2] if w).upper()
     cv2.putText(img, initials, (105, 250), cv2.FONT_HERSHEY_SIMPLEX, 4.0, (235, 235, 235), 8)
@@ -57,17 +50,56 @@ def create_demo_case(upload_folder):
     os.makedirs(person_dir, exist_ok=True)
     fname = "demo_%d.jpg" % int(time.time() * 1000)
     cv2.imwrite(os.path.join(person_dir, fname), img)
-    photo = "/static/uploads/%s/%s" % (subdir, fname)
+    return "/static/uploads/%s/%s" % (subdir, fname)
 
-    case = MissingPerson(
-        name=name, last_location=location, status='active', photo_path=photo,
-        last_location_source='facebook', last_location_updated_at=datetime.utcnow(),
-        reporter='demo',
-    )
-    db.session.add(case)
+
+def run_demo(upload_folder):
+    """Run the fixed 3-post Facebook demo: match-or-create each person and log
+    every processed post as a FacebookSighting. Returns a summary for the UI."""
+    import uuid
+    active = MissingPerson.query.filter_by(status='active').all()
+    summary = {"scanned": 0, "matched": 0, "updated": 0, "created": 0, "results": []}
+
+    for name, location in _DEMO_POSTS:
+        summary["scanned"] += 1
+        post_text = ("URGENT missing person: %s was last seen near %s. "
+                     "Please contact the family with any information." % (name, location))
+        case, score = fa.best_name_match(post_text, active)
+
+        if case and score >= fa.NAME_MATCH_THRESHOLD:
+            previous = case.last_location
+            case.last_location = location
+            case.last_location_updated_at = datetime.utcnow()
+            case.last_location_source = 'facebook'
+            summary["matched"] += 1
+            summary["updated"] += 1
+            action, score_val = "updated", round(score, 1)
+            notify_case_update(
+                case, "New sighting: %s spotted near %s" % (name, location),
+                "%s may have been spotted near %s (from a social-media post)." % (name, location))
+        else:
+            case = MissingPerson(
+                name=name, last_location=location, status='active',
+                photo_path=_demo_avatar(name, upload_folder),
+                last_location_source='facebook', last_location_updated_at=datetime.utcnow(),
+                reporter='demo')
+            db.session.add(case)
+            db.session.flush()  # assign case.id
+            previous = None
+            summary["created"] += 1
+            action, score_val = "created", 100.0
+
+        db.session.add(FacebookSighting(
+            missing_person_id=case.id,
+            post_id="demo-%s-%s" % (secure_filename(name), uuid.uuid4().hex[:10]),
+            post_url=None, post_text=post_text, matched_name=name,
+            match_score=score_val, previous_location=previous,
+            new_location=location, applied=True,
+        ))
+        summary["results"].append({"id": case.id, "name": name, "location": location, "action": action})
+
     db.session.commit()
-    return {"created": True, "id": case.id, "name": name,
-            "location": location, "post_text": post_text}
+    return summary
 
 
 def synthesize_demo_posts():
